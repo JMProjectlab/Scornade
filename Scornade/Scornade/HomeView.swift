@@ -7,6 +7,12 @@ struct HomeView: View {
     private var games: [Game] {
         filter == "all" ? GameCatalog.all : GameCatalog.all.filter { $0.category == filter }
     }
+
+    /// « Perso » n'apparaît qu'une fois un jeu créé : une catégorie toujours
+    /// vide dans la barre de filtres n'apprend rien à personne.
+    private var categories: [(key: String, label: String)] {
+        GameCatalog.categories.filter { $0.key != "perso" || !store.customGames.isEmpty }
+    }
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 12)]
 
     var body: some View {
@@ -22,7 +28,7 @@ struct HomeView: View {
 
                     ScrollView(.horizontal) {
                         HStack(spacing: 8) {
-                            ForEach(GameCatalog.categories, id: \.key) { cat in
+                            ForEach(categories, id: \.key) { cat in
                                 FilterPill(label: cat.label, selected: filter == cat.key) {
                                     filter = cat.key
                                 }
@@ -36,6 +42,8 @@ struct HomeView: View {
                             NavigationLink(value: game) { GameCard(game: game) }
                                 .buttonStyle(.plain)
                         }
+                        NavigationLink(value: CustomGameRoute()) { NewGameCard() }
+                            .buttonStyle(.plain)
                     }
                 }
                 .padding()
@@ -56,6 +64,10 @@ struct HomeView: View {
             }
             .navigationDestination(for: Game.self) { game in
                 NewGameView(game: game) { newID in store.path.append(newID) }
+            }
+            .navigationDestination(for: CustomGameRoute.self) { route in
+                CustomGameView(route: route,
+                               existing: route.editing.flatMap { store.customGame(id: $0) })
             }
             .navigationDestination(for: UUID.self) { id in
                 if let s = store.session(id: id), s.gameId == "coinche" {
@@ -124,6 +136,27 @@ struct GameCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+/// La case vide de la grille : créer son propre jeu.
+struct NewGameCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: "plus")
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(Color.brand)
+                .frame(height: 24)
+            Text("Créer un jeu").font(.subheadline.weight(.medium))
+            Text("Vos propres règles de comptage")
+                .font(.caption2).foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Color.hairline, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+        )
     }
 }
 

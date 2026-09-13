@@ -28,6 +28,13 @@ service cloud.firestore {
       match /sessions/{sessionId} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
+
+      // Les jeux créés dans l'application. Ils appartiennent à leur auteur et
+      // ne sont pas partagés : c'est `games/{gameId}`, plus haut, qui porte le
+      // catalogue commun — et lui reste en lecture seule.
+      match /customGames/{gameId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
     }
   }
 }

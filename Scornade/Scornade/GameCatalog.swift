@@ -78,17 +78,32 @@ enum GameCatalog {
 
     static func game(id: String) -> Game? { all.first { $0.id == id } }
 
+    /// « Perso » figure ici, mais l'accueil ne l'affiche qu'une fois un jeu
+    /// créé : une catégorie toujours vide n'apprend rien à personne.
     static let categories: [(key: String, label: String)] = [
         ("all", "Tous"), ("cartes", "Cartes"),
         ("societe", "Société"), ("sport", "Sport"),
-        ("des", "Dés"),
+        ("des", "Dés"), ("perso", "Perso"),
     ]
+
+    // MARK: Jeux personnalisés
+
+    /// Les jeux créés par l'utilisateur, tenus à jour par le `Store`.
+    ///
+    /// Ils viennent après le catalogue livré : celui-ci ne change pas de place
+    /// sous les yeux de l'utilisateur parce qu'il a inventé un jeu.
+    private(set) static var custom: [Game] = []
+
+    static func setCustom(_ games: [Game]) { custom = games }
 
     // MARK: Corrections venues de Firestore
 
-    /// Le catalogue effectif : celui embarqué, corrigé par ce que dit la
-    /// collection `games` de Firestore.
-    private(set) static var all: [Game] = bundled
+    /// Le catalogue livré, corrigé par ce que dit la collection `games` de
+    /// Firestore.
+    private static var corrected: [Game] = bundled
+
+    /// Le catalogue effectif : les jeux livrés, puis ceux de l'utilisateur.
+    static var all: [Game] { corrected + custom }
 
     private static let cacheKey = "sm.catalog"
 
@@ -123,7 +138,7 @@ enum GameCatalog {
                 next[i].defaultTarget = v; changed = true
             }
         }
-        if changed { all = next }
+        if changed { corrected = next }
         return changed
     }
 

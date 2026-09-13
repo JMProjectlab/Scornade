@@ -4,7 +4,10 @@
 // assez rapide à cette échelle, et ça évite d'avoir à synchroniser à la main
 // une douzaine de fragments de vue.
 
-import { GAMES, CATEGORIES, gameById, HUES, glyph } from "./data.js";
+import { CATEGORIES, HUES, glyph } from "./data.js";
+import {
+  CUSTOM_ENGINES, CUSTOM_SYMBOLS, blankCustomGame, customGameErrors, isCustomGame,
+} from "./customgames.js";
 import * as C from "./charts.js";
 import * as E from "./engine.js";
 import * as S from "./store.js";
@@ -106,7 +109,8 @@ function screenLogin() {
 
 function screenHome() {
   const active = S.activeSession();
-  const games = S.state.filter === "all" ? GAMES : GAMES.filter((g) => g.cat === S.state.filter);
+  const catalog = S.allGames();
+  const games = S.state.filter === "all" ? catalog : catalog.filter((g) => g.cat === S.state.filter);
 
   let html = "";
   if (active) {
@@ -114,26 +118,134 @@ function screenHome() {
     html += `<button class="active-card" data-act="open-session" data-id="${active.id}">
       <span class="active-top"><span class="tag">EN COURS</span>
         <span class="sub">Manche ${active.rounds.length}</span></span>
-      <span class="active-name">${glyph(active.gameId, 20)}${esc(active.gameName)}</span>
+      <span class="active-name">${glyph(active.gameId, 20, active.symbol)}${esc(active.gameName)}</span>
       <span class="active-line">${esc(line)}</span></button>`;
   }
 
+  // Le filtre « Perso » ne s'affiche qu'une fois un jeu créé : une catégorie
+  // toujours vide n'apprend rien à personne.
+  const hasCustom = S.state.customGames.length > 0;
   html += `<div class="pillbar" role="group" aria-label="Filtrer par catégorie">` +
-    CATEGORIES.map(([key, label]) =>
+    CATEGORIES.filter(([key]) => key !== "perso" || hasCustom).map(([key, label]) =>
       `<button class="pill" data-act="filter" data-key="${key}"
         aria-pressed="${S.state.filter === key}">${label}</button>`).join("") + `</div>`;
 
   html += `<div class="grid-games">` + games.map((g) =>
     `<button class="gcard" data-act="pick-game" data-id="${g.id}">
-      <span class="glyph">${glyph(g.id, 26)}</span>
+      <span class="glyph">${glyph(g.id, 26, g.symbol)}</span>
       <span class="gname">${esc(g.name)}</span>
-      <span class="gtype">${g.team ? "Équipe" : "Individuel"}</span></button>`).join("") + `</div>`;
+      <span class="gtype">${g.team ? "Équipe" : "Individuel"}</span></button>`).join("") +
+    `<button class="gcard new" data-act="new-custom">
+      <span class="glyph" aria-hidden="true">+</span>
+      <span class="gname">Créer un jeu</span>
+      <span class="gtype">Vos propres règles de comptage</span></button></div>`;
 
   return html;
 }
 
+// --- créateur de jeu ------------------------------------------------------
+
+/**
+ * Formulaire d'un jeu personnalisé.
+ *
+ * Les champs libres — nom, règles — vivent dans le DOM et ne sont relus qu'au
+ * moment d'agir : `readCustomForm()` les récupère avant chaque redessin, sinon
+ * un clic sur une pastille effacerait ce qui vient d'être tapé.
+ */
+function screenCustomGame() {
+  // Comme les autres écrans : la navigation dit quoi éditer, `scratch` porte la
+  // saisie en cours. Un jeu supprimé entre-temps ramène à un formulaire vierge.
+  scratch.custom ??= view.customId
+    ? { ...(S.customById(view.customId) ?? blankCustomGame()) }
+    : blankCustomGame();
+  const g = scratch.custom;
+  const editing = Boolean(S.customById(g.id));
+  const errors = scratch.customErrors ?? [];
+
+  const chips = (name, options, current) => `<div class="chips">` + options.map(([key, label]) =>
+    `<button class="chip" data-act="custom-set" data-field="${name}" data-value="${key}"
+      aria-pressed="${current === key}">${esc(label)}</button>`).join("") + `</div>`;
+
+  const engineHelp = CUSTOM_ENGINES.find(([k]) => k === g.engine)?.[2] ?? "";
+
+  let html = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+      <button class="ghost" data-act="home">‹ Jeux</button>
+      <h1 style="flex:1;font-size:24px">${editing ? "Modifier le jeu" : "Créer un jeu"}</h1></div>`;
+
+  if (errors.length) {
+    html += `<div class="card" role="alert">` +
+      errors.map((e) => `<p class="hint" style="margin:0;color:var(--red)">${esc(e)}</p>`).join("") +
+      `</div>`;
+  }
+
+  html += `<div class="card">
+      <label class="row" style="border:none;padding:0;gap:12px">
+        <span class="name">Nom</span>
+        <input type="text" id="custom-name" maxlength="40" value="${esc(g.name)}"
+          placeholder="Belote de mon grand-père" aria-label="Nom du jeu"></label>
+    </div>`;
+
+  html += `<div class="section-label">Pictogramme</div><div class="chips">` +
+    CUSTOM_SYMBOLS.map((key) =>
+      `<button class="chip fixed" data-act="custom-set" data-field="symbol" data-value="${key}"
+        aria-pressed="${g.symbol === key}" aria-label="Pictogramme ${key}">${glyph("", 22, key)}</button>`
+    ).join("") + `</div>`;
+
+  html += `<div class="section-label">Comment on compte</div>` +
+    chips("engine", CUSTOM_ENGINES.map(([k, label]) => [k, label]), g.engine) +
+    `<p class="hint" style="margin-top:-6px">${esc(engineHelp)}</p>`;
+
+  html += `<div class="section-label">Format</div>` +
+    chips("team", [["solo", "Individuel"], ["team", "Deux équipes"]], g.team ? "team" : "solo");
+
+  // Aux manches gagnées, l'objectif se compte en petites unités : une belle se
+  // joue en 3, pas en 50.
+  const step = g.engine === "manche" ? 1 : (g.target > 0 && g.target < 50 ? 5 : 50);
+  html += `<div class="section-label">Objectif</div><div class="card">
+      <div style="display:flex;align-items:center;gap:14px">
+        <button class="chip fixed" data-act="custom-target" data-delta="${-step}" aria-label="Diminuer l'objectif">−</button>
+        <div style="flex:1;text-align:center">
+          <div class="tab" style="font-size:19px;font-weight:600">${
+            g.target === 0 ? "Fin de partie libre"
+              : (g.engine === "manche" ? `${g.target} manches gagnées` : `${g.target} points`)}</div>
+          <div style="font-size:13px;color:var(--ink-2)">${
+            g.engine === "countdown" ? "on descend jusqu'à zéro" : (g.high ? "le + haut gagne" : "le + bas gagne")}</div>
+        </div>
+        <button class="chip fixed" data-act="custom-target" data-delta="${step}" aria-label="Augmenter l'objectif">+</button>
+      </div></div>`;
+
+  // Un compte à rebours gagne forcément en descendant : proposer le contraire
+  // décrirait une partie que le moteur ne sait pas compter.
+  if (g.engine !== "countdown") {
+    html += `<div class="section-label">Qui gagne</div>` +
+      chips("high", [["high", "Le plus haut score"], ["low", "Le plus bas score"]], g.high ? "high" : "low");
+  }
+
+  html += `<div class="section-label">Nombre de manches</div><div class="card">
+      <div style="display:flex;align-items:center;gap:14px">
+        <button class="chip fixed" data-act="custom-rounds" data-delta="-1" aria-label="Moins de manches">−</button>
+        <div style="flex:1;text-align:center" class="tab" style="font-size:19px">${
+          g.roundLimit === 0 ? "Libre" : `${g.roundLimit} manches`}</div>
+        <button class="chip fixed" data-act="custom-rounds" data-delta="1" aria-label="Plus de manches">+</button>
+      </div>
+      <p class="hint" style="margin:10px 0 0">Fixé, la partie s'arrête d'elle-même au bout du compte.</p></div>`;
+
+  html += `<div class="section-label">Règles (facultatif)</div><div class="card">
+      <textarea id="custom-rules" rows="5" maxlength="2000"
+        aria-label="Règles du jeu"
+        placeholder="Ce qu'il faut se rappeler avant de commencer.">${esc(g.rules)}</textarea></div>`;
+
+  html += `<button class="btn primary" data-act="save-custom">${
+    editing ? "Enregistrer" : "Créer le jeu"}</button>`;
+  if (editing) {
+    html += `<button class="btn secondary" data-act="del-custom" data-id="${g.id}">Supprimer ce jeu</button>
+      <p class="hint" style="text-align:center">Les parties déjà jouées avec lui sont conservées.</p>`;
+  }
+  return html;
+}
+
 function screenNewGame() {
-  const g = gameById(view.gameId);
+  const g = S.gameById(view.gameId);
   scratch.assign ??= {};
   scratch.target ??= g.target;
 
@@ -146,7 +258,9 @@ function screenNewGame() {
     <p class="hint">${g.team
       ? "Cliquez pour assigner à une équipe, re-cliquez pour retirer."
       : "Cliquez pour ajouter ou retirer un joueur."}
-      <button class="ghost" data-act="rules" style="padding:0 4px">Voir les règles</button></p>
+      ${g.rules ? `<button class="ghost" data-act="rules" style="padding:0 4px">Voir les règles</button>` : ""}
+      ${g.custom ? `<button class="ghost" data-act="edit-custom" data-id="${g.id}"
+        style="padding:0 4px">Modifier ce jeu</button>` : ""}</p>
     <div class="card">`;
 
   html += S.state.players.map((p) => {
@@ -635,10 +749,15 @@ function scoringYams(session) {
 function screenScoring() {
   const session = S.sessionById(view.id);
   if (!session) return `<div class="empty">Partie introuvable.</div>`;
-  const game = gameById(session.gameId);
+  const game = S.gameById(session.gameId);
 
   let parts;
-  if (game.id === "belote") parts = scoringBelote(session);
+  // Un jeu personnalisé n'a que le comptage générique : c'est le seul qui ne
+  // suppose rien de la façon dont on joue. Un jeu supprimé depuis — `game` est
+  // alors introuvable — se lit de la même façon : tout ce qu'il faut pour
+  // afficher la partie est dans la partie elle-même.
+  if (!game || isCustomGame(game.id)) parts = scoringGeneric(session, game);
+  else if (game.id === "belote") parts = scoringBelote(session);
   else if (game.engine === "payoo") parts = scoringPayoo(session);
   else if (game.engine === "countdown") parts = scoringDarts(session);
   else if (game.engine === "molkky") parts = scoringMolkky(session);
@@ -716,7 +835,7 @@ function screenHistory() {
     const when = new Date(s.date).toLocaleDateString("fr-FR",
       { day: "numeric", month: "short", year: "numeric" });
     return `<div class="row">
-      <span class="glyph" style="width:28px">${glyph(s.gameId, 20)}</span>
+      <span class="glyph" style="width:28px">${glyph(s.gameId, 20, s.symbol)}</span>
       <button class="hist-open" data-act="open-session" data-id="${s.id}">
         <span class="name">${esc(s.gameName)}</span>
         <span class="sub tab">${scores}</span>
@@ -898,6 +1017,7 @@ export function render() {
   let body;
   switch (view.screen) {
     case "new": body = screenNewGame(); break;
+    case "custom": body = screenCustomGame(); break;
     case "score": body = screenScoring(); break;
     case "history": body = screenHistory(); break;
     case "players": body = screenPlayers(); break;
@@ -931,6 +1051,16 @@ export function render() {
 // --- interactions ---------------------------------------------------------
 
 function currentSession() { return view.id ? S.sessionById(view.id) : null; }
+
+/** Recopie les champs libres du créateur de jeu dans `scratch` avant redessin. */
+function readCustomForm() {
+  if (!scratch.custom) return;
+  const name = document.getElementById("custom-name");
+  const rules = document.getElementById("custom-rules");
+  if (name) scratch.custom.name = name.value;
+  if (rules) scratch.custom.rules = rules.value;
+  scratch.customErrors = null;
+}
 
 function playTurn(session, outcome) {
   if (!outcome) return;
@@ -966,17 +1096,74 @@ export function bindEvents() {
       case "home": go({ screen: "home" }); break;
       case "filter": S.state.filter = el.dataset.key; render(); break;
       case "pick-game": go({ screen: "new", gameId: el.dataset.id }); break;
+
+      case "new-custom": go({ screen: "custom" }); break;
+      case "edit-custom": go({ screen: "custom", customId: el.dataset.id }); break;
+      case "custom-set": {
+        readCustomForm();
+        const { field, value } = el.dataset;
+        if (field === "team") scratch.custom.team = value === "team";
+        else if (field === "high") scratch.custom.high = value === "high";
+        else scratch.custom[field] = value;
+        // Le compte à rebours impose son sens de victoire et un objectif d'où
+        // partir : on le pose ici pour que l'écran le montre tout de suite.
+        // Changer de moteur change l'ordre de grandeur de l'objectif : 501 à
+        // retrancher, 3 manches à gagner. Reproposer 500 manches n'aiderait
+        // personne — mais un objectif déjà plausible n'est pas touché.
+        if (field === "engine") {
+          const t = scratch.custom.target;
+          if (value === "countdown" && (t === 0 || t < 100)) scratch.custom.target = 501;
+          if (value === "manche" && t > 21) scratch.custom.target = 3;
+          if (value === "cumul" && t > 0 && t < 21) scratch.custom.target = 500;
+        }
+        if (scratch.custom.engine === "countdown") {
+          scratch.custom.high = false;
+          if (!scratch.custom.target) scratch.custom.target = 501;
+        }
+        render();
+        break;
+      }
+      case "custom-target": {
+        readCustomForm();
+        const step = Number(el.dataset.delta);
+        scratch.custom.target = Math.max(0, Math.min(10000, scratch.custom.target + step));
+        render();
+        break;
+      }
+      case "custom-rounds": {
+        readCustomForm();
+        const next = scratch.custom.roundLimit + Number(el.dataset.delta);
+        scratch.custom.roundLimit = Math.max(0, Math.min(99, next));
+        render();
+        break;
+      }
+      case "save-custom": {
+        readCustomForm();
+        const errors = customGameErrors(scratch.custom, S.state.customGames);
+        if (errors.length) { scratch.customErrors = errors; render(); break; }
+        const saved = S.saveCustomGame(scratch.custom);
+        toast("Jeu enregistré.");
+        go({ screen: "new", gameId: saved.id });
+        break;
+      }
+      case "del-custom": {
+        if (!confirm("Supprimer ce jeu ? Les parties déjà jouées avec lui sont conservées.")) break;
+        S.deleteCustomGame(el.dataset.id);
+        if (S.state.filter === "perso" && !S.state.customGames.length) S.state.filter = "all";
+        go({ screen: "home" });
+        break;
+      }
       case "open-session": go({ screen: "score", id: el.dataset.id }); break;
 
       case "rules": {
-        const g = gameById(view.gameId);
+        const g = S.gameById(view.gameId);
         openSheet(`Règles · ${g.name}`, g.rules);
         break;
       }
       case "close-sheet": document.getElementById("sheet").close(); break;
 
       case "cycle": {
-        const g = gameById(view.gameId);
+        const g = S.gameById(view.gameId);
         const id = el.dataset.id;
         const cur = scratch.assign[id] ?? 0;
         scratch.assign[id] = cur >= (g.team ? 2 : 1) ? 0 : cur + 1;
@@ -995,7 +1182,7 @@ export function bindEvents() {
         break;
       }
       case "start": {
-        const g = gameById(view.gameId);
+        const g = S.gameById(view.gameId);
         const a = scratch.assign;
         let entrants;
         if (g.team) {
@@ -1189,7 +1376,7 @@ export function bindEvents() {
     if (el.classList.contains("entry")) {
       scratch.inputs[Number(el.dataset.i)] = el.value;
       // Papayoo affiche un compteur vivant : il faut redessiner à la frappe.
-      if (session && gameById(session.gameId).engine === "payoo") renderKeepingFocus();
+      if (session && S.gameById(session.gameId)?.engine === "payoo") renderKeepingFocus();
       return;
     }
     if (el.classList.contains("b-pts")) {

@@ -8,11 +8,15 @@ import FirebaseFirestore
 final class Store: ObservableObject {
     @Published var players: [Player] = []
     @Published var sessions: [ScoreSession] = []
+    /// Les jeux créés par l'utilisateur. Ils lui appartiennent et le suivent
+    /// d'un appareil à l'autre, comme ses joueurs.
+    @Published var customGames: [CustomGame] = []
     @Published var path = NavigationPath()
     @Published var currentUser: UserAccount?
 
     private let playersKey = "sm.players"
     private let sessionsKey = "sm.sessions"
+    private let customGamesKey = "sm.customGames"
     private let userKey = "sm.user"
 
     // MARK: Firestore
@@ -36,6 +40,7 @@ final class Store: ObservableObject {
     private lazy var db = Firestore.firestore()
     private var playersListener: ListenerRegistration?
     private var sessionsListener: ListenerRegistration?
+    private var customGamesListener: ListenerRegistration?
     private var catalogListener: ListenerRegistration?
 
     /// Change de valeur quand le catalogue est corrigé depuis Firestore.
@@ -49,6 +54,7 @@ final class Store: ObservableObject {
     /// ce qui a changé plutôt que la collection entière à chaque sauvegarde.
     private var pushedPlayers: [String: String] = [:]
     private var pushedSessions: [String: String] = [:]
+    private var pushedCustomGames: [String: String] = [:]
 
     /// La connexion est obligatoire : sans compte Firebase authentifié, il n'y a
     /// rien à synchroniser. Le cache local sert alors de secours hors-ligne.
@@ -63,6 +69,7 @@ final class Store: ObservableObject {
         // Les corrections déjà reçues s'appliquent avant le premier écran :
         // pas de libellé qui change sous les yeux une seconde plus tard.
         GameCatalog.loadCached()
+        publishCustomGames()
         if players.isEmpty {
             players = [
                 Player(name: "Jimmy", colorIndex: 0),
@@ -87,6 +94,39 @@ final class Store: ObservableObject {
     func removePlayer(_ player: Player) {
         players.removeAll { $0.id == player.id }
         save()
+    }
+
+    // MARK: Jeux personnalisés
+
+    /// Crée ou met à jour un jeu, et renvoie ce qui a réellement été enregistré.
+    @discardableResult
+    func saveCustomGame(_ game: CustomGame) -> CustomGame {
+        let clean = game.normalized()
+        if let i = customGames.firstIndex(where: { $0.id == clean.id }) {
+            customGames[i] = clean
+        } else {
+            customGames.append(clean)
+        }
+        publishCustomGames()
+        save()
+        return clean
+    }
+
+    /// Supprime un jeu personnalisé. Les parties déjà jouées avec lui restent :
+    /// elles portent leur propre nom et leur propre symbole, et l'historique
+    /// comme les statistiques continuent de les afficher.
+    func deleteCustomGame(id: String) {
+        customGames.removeAll { $0.id == id }
+        publishCustomGames()
+        save()
+    }
+
+    func customGame(id: String) -> CustomGame? { customGames.first { $0.id == id } }
+
+    /// Recopie les jeux de l'utilisateur dans le catalogue et fait redessiner.
+    private func publishCustomGames() {
+        GameCatalog.setCustom(customGames.map(\.game))
+        catalogRevision += 1
     }
 
     // MARK: Sessions
@@ -355,18 +395,22 @@ final class Store: ObservableObject {
     /// Efface toutes les données de l'utilisateur : joueurs, parties et compte,
     /// en local ET côté serveur. Action irréversible (exigée par Apple).
     func deleteAllData() {
-        let ids = (players.map(\.id.uuidString), sessions.map(\.id.uuidString))
+        let ids = (players.map(\.id.uuidString), sessions.map(\.id.uuidString),
+                   customGames.map(\.id))
         let wasSyncing = syncEnabled
         let user = Auth.auth().currentUser
 
         stopSync()
         players = []
         sessions = []
+        customGames = []
+        publishCustomGames()
         currentUser = nil
         path = NavigationPath()
         pushedPlayers = [:]
         pushedSessions = [:]
-        for key in [playersKey, sessionsKey, userKey] {
+        pushedCustomGames = [:]
+        for key in [playersKey, sessionsKey, customGamesKey, userKey] {
             UserDefaults.standard.removeObject(forKey: key)
         }
 
@@ -376,6 +420,7 @@ final class Store: ObservableObject {
             let batch = db.batch()
             for id in ids.0 { batch.deleteDocument(root.collection("players").document(id)) }
             for id in ids.1 { batch.deleteDocument(root.collection("sessions").document(id)) }
+            for id in ids.2 { batch.deleteDocument(root.collection("customGames").document(id)) }
             try? await batch.commit()
             // Le compte lui-même part avec les données : c'est ce qu'exige la
             // règle 5.1.1(v) d'Apple sur la suppression de compte depuis l'app.
@@ -406,6 +451,9 @@ final class Store: ObservableObject {
         if let s = try? enc.encode(sessions) {
             UserDefaults.standard.set(s, forKey: sessionsKey)
         }
+        if let g = try? enc.encode(customGames) {
+            UserDefaults.standard.set(g, forKey: customGamesKey)
+        }
     }
 
     private func load() {
@@ -417,6 +465,10 @@ final class Store: ObservableObject {
         if let s = UserDefaults.standard.data(forKey: sessionsKey),
            let decoded = try? dec.decode([ScoreSession].self, from: s) {
             sessions = decoded
+        }
+        if let g = UserDefaults.standard.data(forKey: customGamesKey),
+           let decoded = try? dec.decode([CustomGame].self, from: g) {
+            customGames = decoded.map { $0.normalized() }
         }
         if let u = UserDefaults.standard.data(forKey: userKey),
            let decoded = try? dec.decode(UserAccount.self, from: u) {
@@ -440,6 +492,11 @@ final class Store: ObservableObject {
             guard let snap else { return }
             let remote = Self.decodeAll(ScoreSession.self, from: snap.documents)
             Task { @MainActor in self?.mergeSessions(remote) }
+        }
+        customGamesListener = root.collection("customGames").addSnapshotListener { [weak self] snap, _ in
+            guard let snap else { return }
+            let remote = Self.decodeAll(CustomGame.self, from: snap.documents)
+            Task { @MainActor in self?.mergeCustomGames(remote) }
         }
 
         // Le catalogue est commun à tous les comptes : il est en lecture seule,
@@ -481,6 +538,7 @@ final class Store: ObservableObject {
     private func stopSync() {
         playersListener?.remove(); playersListener = nil
         sessionsListener?.remove(); sessionsListener = nil
+        customGamesListener?.remove(); customGamesListener = nil
         catalogListener?.remove(); catalogListener = nil
     }
 
@@ -504,12 +562,13 @@ final class Store: ObservableObject {
         let batch = db.batch()
         var writes = 0
 
-        func stage<T: Encodable & Identifiable>(_ items: [T],
-                                                into collection: String,
-                                                cache: inout [String: String]) where T.ID == UUID {
-            let current = Set(items.map(\.id.uuidString))
+        func stage<T: Encodable>(_ items: [T],
+                                 into collection: String,
+                                 id: (T) -> String,
+                                 cache: inout [String: String]) {
+            let current = Set(items.map(id))
             for item in items {
-                let key = item.id.uuidString
+                let key = id(item)
                 guard let data = try? enc.encode(item),
                       let json = String(data: data, encoding: .utf8),
                       cache[key] != json else { continue }
@@ -529,8 +588,9 @@ final class Store: ObservableObject {
             }
         }
 
-        stage(players, into: "players", cache: &pushedPlayers)
-        stage(sessions, into: "sessions", cache: &pushedSessions)
+        stage(players, into: "players", id: { $0.id.uuidString }, cache: &pushedPlayers)
+        stage(sessions, into: "sessions", id: { $0.id.uuidString }, cache: &pushedSessions)
+        stage(customGames, into: "customGames", id: { $0.id }, cache: &pushedCustomGames)
 
         guard writes > 0 else { return }
         batch.commit { _ in /* Firestore rejoue l'écriture au retour du réseau. */ }
@@ -543,6 +603,16 @@ final class Store: ObservableObject {
         var byID = Dictionary(uniqueKeysWithValues: players.map { ($0.id, $0) })
         for p in remote { byID[p.id] = p }
         players = Array(byID.values).sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+        saveLocalCacheOnly()
+    }
+
+    private func mergeCustomGames(_ remote: [CustomGame]) {
+        guard !remote.isEmpty else { return }
+        var byID = Dictionary(uniqueKeysWithValues: customGames.map { ($0.id, $0) })
+        for g in remote { byID[g.id] = g.normalized() }
+        customGames = Array(byID.values)
+            .sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+        publishCustomGames()
         saveLocalCacheOnly()
     }
 

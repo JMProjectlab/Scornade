@@ -8,11 +8,13 @@
 // Sans configuration, le site reste pleinement utilisable en local. C'est ce qui
 // permet de le déployer et de l'essayer avant d'avoir créé le projet Firebase.
 
-import { HUES } from "./data.js";
+import { HUES, GAMES, gameById as bundledGameById } from "./data.js";
 import { isFinished, winnerIndex } from "./engine.js";
+import { normalizeCustomGame, toGame } from "./customgames.js";
 
 const KEY_PLAYERS = "sm.players";
 const KEY_SESSIONS = "sm.sessions";
+const KEY_CUSTOM = "sm.customGames";
 const KEY_USER = "sm.user";
 const KEY_LANG = "sm.languagePreference";
 const KEY_THEME = "sm.theme";
@@ -20,6 +22,8 @@ const KEY_THEME = "sm.theme";
 export const state = {
   players: [],
   sessions: [],
+  /** Jeux créés par l'utilisateur. Synchronisés comme les joueurs. */
+  customGames: [],
   user: null,
   filter: "all",
   /** Renseigné par firebase.js quand la synchronisation est active. */
@@ -53,12 +57,14 @@ function writeJSON(key, value) {
 export function load() {
   state.players = readJSON(KEY_PLAYERS, []);
   state.sessions = readJSON(KEY_SESSIONS, []);
+  state.customGames = readJSON(KEY_CUSTOM, []).map(normalizeCustomGame);
   state.user = readJSON(KEY_USER, null);
 }
 
 function persistLocal() {
   writeJSON(KEY_PLAYERS, state.players);
   writeJSON(KEY_SESSIONS, state.sessions);
+  writeJSON(KEY_CUSTOM, state.customGames);
 }
 
 /** Enregistre, pousse vers Firestore si branché, puis redessine. */
@@ -104,8 +110,9 @@ export async function deleteEverything() {
   const sync = state.sync;
   state.players = [];
   state.sessions = [];
+  state.customGames = [];
   state.sync = null;
-  [KEY_PLAYERS, KEY_SESSIONS, KEY_USER].forEach((k) => localStorage.removeItem(k));
+  [KEY_PLAYERS, KEY_SESSIONS, KEY_CUSTOM, KEY_USER].forEach((k) => localStorage.removeItem(k));
   state.user = null;
   emit();
   await sync?.deleteAll();
@@ -129,6 +136,44 @@ export function removePlayer(id) {
 
 export const playerById = (id) => state.players.find((p) => p.id === id);
 
+// --- Jeux personnalisés ---------------------------------------------------
+
+/**
+ * Le catalogue effectif : les jeux embarqués, puis ceux que l'utilisateur a
+ * créés. Les siens viennent en dernier — le catalogue livré ne bouge pas de
+ * place sous ses yeux parce qu'il a inventé un jeu.
+ */
+export const allGames = () => [...GAMES, ...state.customGames.map(toGame)];
+
+/** Résout un identifiant dans le catalogue complet, jeux personnalisés compris. */
+export const gameById = (id) => bundledGameById(id) ?? customAsGame(id);
+
+export const customById = (id) => state.customGames.find((g) => g.id === id);
+
+const customAsGame = (id) => {
+  const c = customById(id);
+  return c ? toGame(c) : undefined;
+};
+
+export function saveCustomGame(raw) {
+  const game = normalizeCustomGame(raw);
+  const i = state.customGames.findIndex((g) => g.id === game.id);
+  if (i >= 0) state.customGames[i] = game;
+  else state.customGames.push(game);
+  commit();
+  return game;
+}
+
+/**
+ * Supprime un jeu personnalisé. Les parties déjà jouées avec lui restent :
+ * elles portent leur propre nom et leur propre symbole, et l'historique comme
+ * les statistiques continuent de les afficher.
+ */
+export function deleteCustomGame(id) {
+  state.customGames = state.customGames.filter((g) => g.id !== id);
+  commit();
+}
+
 // --- Parties --------------------------------------------------------------
 
 export function createSession(game, entrants, target) {
@@ -136,6 +181,9 @@ export function createSession(game, entrants, target) {
     id: uid(),
     gameId: game.id,
     gameName: game.name,
+    // Le symbole est recopié dans la partie : un jeu personnalisé supprimé
+    // laisse un historique qui s'affiche encore correctement.
+    symbol: game.symbol ?? null,
     date: new Date().toISOString(),
     target,
     higherWins: game.high,
@@ -276,7 +324,7 @@ export function deleteSession(id) {
  * ne supprime rien : elle peut simplement signifier que l'entrée locale n'a pas
  * encore été poussée.
  */
-export function mergeRemote({ players, sessions }) {
+export function mergeRemote({ players, sessions, customGames }) {
   if (players?.length) {
     const byId = new Map(state.players.map((p) => [p.id, p]));
     players.forEach((p) => byId.set(p.id, p));
@@ -286,6 +334,11 @@ export function mergeRemote({ players, sessions }) {
     const byId = new Map(state.sessions.map((s) => [s.id, s]));
     sessions.forEach((s) => byId.set(s.id, s));
     state.sessions = [...byId.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
+  }
+  if (customGames?.length) {
+    const byId = new Map(state.customGames.map((g) => [g.id, g]));
+    customGames.forEach((g) => byId.set(g.id, normalizeCustomGame(g)));
+    state.customGames = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
   persistLocal();
   emit();

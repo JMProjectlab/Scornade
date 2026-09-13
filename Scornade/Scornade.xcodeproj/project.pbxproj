@@ -64,6 +64,9 @@
 		2B780AF12FE09CF000B4E0E3 /* Game421ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF02FE09CF000B4E0E3 /* Game421ScoringView.swift */; };
 		2B780AF22FE09CF000B4E0E3 /* Game421ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF02FE09CF000B4E0E3 /* Game421ScoringView.swift */; };
 		2B780AF32FE09CF000B4E0E3 /* Game421ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF02FE09CF000B4E0E3 /* Game421ScoringView.swift */; };
+		2B780C022FE09D2A00B4E0E3 /* CustomGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780C012FE09D2A00B4E0E3 /* CustomGameView.swift */; };
+		2B780C032FE09D2A00B4E0E3 /* CustomGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780C012FE09D2A00B4E0E3 /* CustomGameView.swift */; };
+		2B780C042FE09D2A00B4E0E3 /* CustomGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780C012FE09D2A00B4E0E3 /* CustomGameView.swift */; };
 		2B780AF92FE09D2A00B4E0E3 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF42FE09D2A00B4E0E3 /* HomeView.swift */; };
 		2B780AFA2FE09D2A00B4E0E3 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF42FE09D2A00B4E0E3 /* HomeView.swift */; };
 		2B780AFB2FE09D2A00B4E0E3 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF42FE09D2A00B4E0E3 /* HomeView.swift */; };
@@ -143,6 +146,7 @@
 		2B780ADD2FE09B1B00B4E0E3 /* YamsScoringView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = YamsScoringView.swift; sourceTree = "<group>"; };
 		2B780AE02FE09B1B00B4E0E3 /* FlechettesScoringView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FlechettesScoringView.swift; sourceTree = "<group>"; };
 		2B780AF02FE09CF000B4E0E3 /* Game421ScoringView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Game421ScoringView.swift; sourceTree = "<group>"; };
+		2B780C012FE09D2A00B4E0E3 /* CustomGameView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CustomGameView.swift; sourceTree = "<group>"; };
 		2B780AF42FE09D2A00B4E0E3 /* HomeView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		2B780AF72FE09D2A00B4E0E3 /* GameCatalog.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GameCatalog.swift; sourceTree = "<group>"; };
 		2B780AF82FE09D2A00B4E0E3 /* Models.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -220,6 +224,7 @@
 				2B780AC42FE098A500B4E0E3 /* PlayersView.swift */,
 				2B780AF72FE09D2A00B4E0E3 /* GameCatalog.swift */,
 				2B780B082FE09D4F00B4E0E3 /* Store.swift */,
+				2B780C012FE09D2A00B4E0E3 /* CustomGameView.swift */,
 				2B780AF42FE09D2A00B4E0E3 /* HomeView.swift */,
 				2B780AF82FE09D2A00B4E0E3 /* Models.swift */,
 				2B780AE02FE09B1B00B4E0E3 /* FlechettesScoringView.swift */,
@@ -421,6 +426,7 @@
 				2B780A9A2FE0932200B4E0E3 /* StatsView.swift in Sources */,
 				2B780AA92FE0932200B4E0E3 /* LoginView.swift in Sources */,
 				2B780AA62FE0932200B4E0E3 /* PayooScoringView.swift in Sources */,
+				2B780C022FE09D2A00B4E0E3 /* CustomGameView.swift in Sources */,
 				2B780AF92FE09D2A00B4E0E3 /* HomeView.swift in Sources */,
 				2B780A972FE0932200B4E0E3 /* TarotScoringView.swift in Sources */,
 				2B780AAC2FE0932200B4E0E3 /* ScornadeApp.swift in Sources */,
@@ -465,6 +471,7 @@
 				2B780AC22FE0932200B4E0E3 /* Theme.swift in Sources */,
 				2B780ABC2FE0932200B4E0E3 /* ScoringView.swift in Sources */,
 				2B780B0A2FE09D4F00B4E0E3 /* Store.swift in Sources */,
+				2B780C032FE09D2A00B4E0E3 /* CustomGameView.swift in Sources */,
 				2B780AFA2FE09D2A00B4E0E3 /* HomeView.swift in Sources */,
 				2B780AEE2FE09B1B00B4E0E3 /* FlechettesScoringView.swift in Sources */,
 				2B780AF22FE09CF000B4E0E3 /* Game421ScoringView.swift in Sources */,
@@ -490,6 +497,7 @@
 				2B780AB12FE0932200B4E0E3 /* NewGameView.swift in Sources */,
 				2B780AF32FE09CF000B4E0E3 /* Game421ScoringView.swift in Sources */,
 				2B780B072FE09D2A00B4E0E3 /* Models.swift in Sources */,
+				2B780C042FE09D2A00B4E0E3 /* CustomGameView.swift in Sources */,
 				2B780AFB2FE09D2A00B4E0E3 /* HomeView.swift in Sources */,
 				2B780AC82FE098A500B4E0E3 /* PlayersView.swift in Sources */,
 				2B780A9C2FE0932200B4E0E3 /* StatsView.swift in Sources */,

@@ -17,7 +17,8 @@ let auth = null;
 let db = null;
 let unsubPlayers = null;
 let unsubSessions = null;
-const pushed = { players: new Map(), sessions: new Map() };
+let unsubCustomGames = null;
+const pushed = { players: new Map(), sessions: new Map(), customGames: new Map() };
 
 /** Lit la configuration si elle a été déposée à côté. */
 async function loadConfig() {
@@ -139,6 +140,11 @@ function startListening(userId) {
   unsubSessions = mods.onSnapshot(mods.collection(root, "sessions"), (snap) => {
     mergeRemote({ sessions: decode(snap) });
   });
+  // Les jeux créés par l'utilisateur suivent le même chemin que ses joueurs :
+  // ils lui appartiennent, et ils doivent le suivre d'un appareil à l'autre.
+  unsubCustomGames = mods.onSnapshot(mods.collection(root, "customGames"), (snap) => {
+    mergeRemote({ customGames: decode(snap) });
+  });
 
   state.sync = { push, stop: stopListening, deleteAll };
   push(state);
@@ -147,6 +153,7 @@ function startListening(userId) {
 function stopListening() {
   unsubPlayers?.(); unsubPlayers = null;
   unsubSessions?.(); unsubSessions = null;
+  unsubCustomGames?.(); unsubCustomGames = null;
   unsubCatalog?.(); unsubCatalog = null;
 }
 
@@ -180,6 +187,7 @@ async function push(current) {
 
   stage(current.players, "players");
   stage(current.sessions, "sessions");
+  stage(current.customGames, "customGames");
   if (!writes) return;
   try { await batch.commit(); } catch { /* Firestore rejouera au retour du réseau */ }
 }
@@ -190,7 +198,7 @@ async function deleteAll() {
   if (!user) return;
   const root = mods.doc(db, "users", user.uid);
   const batch = mods.writeBatch(db);
-  for (const name of ["players", "sessions"]) {
+  for (const name of ["players", "sessions", "customGames"]) {
     const snap = await mods.getDocs(mods.collection(root, name));
     snap.forEach((d) => batch.delete(d.ref));
     pushed[name].clear();

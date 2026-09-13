@@ -312,3 +312,123 @@ struct CoincheRound: Codable, Hashable {
         return s
     }
 }
+
+
+// MARK: - Jeux personnalisés
+//
+// Un jeu créé dans l'application n'apporte pas de moteur : il en **choisit** un
+// parmi ceux que l'application sait déjà tenir. C'est la même règle que pour le
+// catalogue corrigé depuis Firestore — un moteur, c'est du code, et du code ne
+// se télécharge pas.
+//
+// La forme de ce document est partagée avec le site : mêmes clés, mêmes valeurs
+// pour `engine` et `symbol` (voir `docs/assets/customgames.js`). Renommer une
+// clé d'un seul côté rendrait les jeux illisibles sur l'autre client.
+
+struct CustomGame: Identifiable, Codable, Hashable {
+    /// Toujours préfixé par `custom-` : c'est ce préfixe qui distingue un jeu
+    /// créé d'un jeu livré, partout où on ne voit passer qu'un identifiant.
+    var id: String
+    var name: String
+    var cat: String
+    /// `cumul` · `countdown` · `manche` — vocabulaire commun aux deux clients.
+    var engine: String
+    /// `star` · `heart` · `dice` · `cards` · `flag` · `trophy`.
+    var symbol: String
+    var team: Bool
+    var target: Int
+    var high: Bool
+    var roundLimit: Int
+    var rules: String
+    /// Date ISO 8601, en texte : le site écrit la sienne de la même façon.
+    var createdAt: String
+
+    static let prefix = "custom-"
+    static let symbols = ["star", "heart", "dice", "cards", "flag", "trophy"]
+    static let engines: [(key: String, label: String, help: String)] = [
+        ("cumul", "Points cumulés", "On saisit les points de chaque manche, ils s'additionnent."),
+        ("countdown", "Compte à rebours", "On part de l'objectif et chaque manche le fait descendre."),
+        ("manche", "Manches gagnées", "Une manche gagnée vaut un point ; le premier à l'objectif gagne."),
+    ]
+    static let maxName = 40
+    static let maxRules = 2000
+
+    static func isCustom(_ id: String) -> Bool { id.hasPrefix(prefix) }
+    static func newID() -> String { prefix + UUID().uuidString.lowercased() }
+
+    static func blank() -> CustomGame {
+        CustomGame(id: newID(), name: "", cat: "perso", engine: "cumul", symbol: "star",
+                   team: false, target: 500, high: true, roundLimit: 0, rules: "",
+                   createdAt: ISO8601DateFormatter().string(from: Date()))
+    }
+
+    /// Le SF Symbol correspondant à un pictogramme. Le site dessine les mêmes
+    /// six formes en SVG, à partir des mêmes clés.
+    static func systemImage(for symbol: String) -> String {
+        switch symbol {
+        case "heart":  return "suit.heart.fill"
+        case "dice":   return "die.face.5.fill"
+        case "cards":  return "rectangle.on.rectangle.angled"
+        case "flag":   return "flag.fill"
+        case "trophy": return "trophy.fill"
+        default:       return "star.fill"
+        }
+    }
+
+    var systemImage: String { CustomGame.systemImage(for: symbol) }
+
+    /// Le jeu tel que le reste de l'application l'attend.
+    ///
+    /// « Manches gagnées » emprunte `mancheWinner`, qui compte déjà ainsi la
+    /// pétanque et le billard : une manche vaut un point.
+    var game: Game {
+        let normalized = self.normalized()
+        let engine: ScoringEngine
+        switch normalized.engine {
+        case "countdown": engine = .countdown
+        case "manche":    engine = .mancheWinner
+        default:          engine = .cumulativePoints
+        }
+        return Game(id: normalized.id, name: normalized.name, category: normalized.cat,
+                    symbol: normalized.systemImage, engine: engine,
+                    isTeamGame: normalized.team, defaultTarget: normalized.target,
+                    higherWins: normalized.high, roundLimit: normalized.roundLimit,
+                    rules: normalized.rules)
+    }
+
+    /// Borne une saisie sans jamais la refuser. Ce qui doit bloquer
+    /// l'enregistrement est dit par `errors(among:)`, qui parle à l'utilisateur.
+    func normalized() -> CustomGame {
+        var g = self
+        if !CustomGame.isCustom(g.id) { g.id = CustomGame.newID() }
+        g.name = String(g.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(CustomGame.maxName))
+        g.rules = String(g.rules.trimmingCharacters(in: .whitespacesAndNewlines).prefix(CustomGame.maxRules))
+        if !CustomGame.engines.contains(where: { $0.key == g.engine }) { g.engine = "cumul" }
+        if !CustomGame.symbols.contains(g.symbol) { g.symbol = "star" }
+        if !["cartes", "societe", "sport", "des", "perso"].contains(g.cat) { g.cat = "perso" }
+        g.target = min(10000, max(0, g.target))
+        g.roundLimit = min(99, max(0, g.roundLimit))
+        if g.engine == "countdown" {
+            // Descendre à zéro, c'est le plus petit total qui gagne ; et sans
+            // objectif, il n'y aurait nulle part d'où partir.
+            g.high = false
+            if g.target == 0 { g.target = 501 }
+        }
+        return g
+    }
+
+    /// Ce qui empêche d'enregistrer, dans l'ordre où l'écran le montre.
+    func errors(among others: [CustomGame]) -> [String] {
+        let g = normalized()
+        var errors: [String] = []
+        if g.name.isEmpty { errors.append("Donnez un nom au jeu.") }
+        if !g.name.isEmpty,
+           others.contains(where: { $0.id != g.id && $0.name.lowercased() == g.name.lowercased() }) {
+            errors.append("Vous avez déjà un jeu personnalisé de ce nom.")
+        }
+        if g.engine == "manche", g.target == 0, g.roundLimit == 0 {
+            errors.append("Aux manches gagnées, fixez un objectif ou un nombre de manches.")
+        }
+        return errors
+    }
+}

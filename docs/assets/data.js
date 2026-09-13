@@ -55,6 +55,9 @@ export const GAMES = [
 export const CATEGORIES = [
   ["all", "Tous"], ["cartes", "Cartes"], ["societe", "Société"],
   ["sport", "Sport"], ["des", "Dés"],
+  // « Perso » n'apparaît que si l'utilisateur a créé au moins un jeu : une
+  // catégorie toujours vide dans la barre de filtres ne renseigne personne.
+  ["perso", "Perso"],
 ];
 
 export const gameById = (id) => GAMES.find((g) => g.id === id);
@@ -223,8 +226,35 @@ const GLYPHS = {
   cinqrois: `<path d="M4 17V8l3.5 3.5L11 5.5l3.5 6L18 8v9z" fill="currentColor"/>`,
 };
 
-export function glyph(gameId, size = 24) {
-  const d = GLYPHS[gameId];
+// Pictogrammes au choix pour un jeu personnalisé. Les clés — star, heart,
+// dice… — sont celles que stocke le document partagé avec l'app iOS, qui les
+// traduit de son côté en SF Symbols.
+export const SYMBOL_GLYPHS = {
+  star: `<path d="M11 2.6l2.6 5.6 6 .7-4.5 4.2 1.2 6L11 16.2 5.7 19.1l1.2-6L2.4 8.9l6-.7z" fill="currentColor"/>`,
+  heart: `<path d="M11 18.6l-1.2-1.1C5.3 13.4 2.6 11 2.6 8A4.4 4.4 0 0 1 7 3.6c1.5 0 3 .8 4 2 1-1.2 2.5-2 4-2A4.4 4.4 0 0 1 19.4 8c0 3-2.7 5.4-7.2 9.5z" fill="currentColor"/>`,
+  dice: `<rect x="3" y="3" width="16" height="16" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="7.4" cy="7.4" r="1.3" fill="currentColor"/><circle cx="14.6" cy="7.4" r="1.3" fill="currentColor"/>
+      <circle cx="7.4" cy="14.6" r="1.3" fill="currentColor"/><circle cx="14.6" cy="14.6" r="1.3" fill="currentColor"/>
+      <circle cx="11" cy="11" r="1.3" fill="currentColor"/>`,
+  cards: `<rect x="2.6" y="5.4" width="9.5" height="13.4" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <rect x="9.9" y="3.2" width="9.5" height="13.4" rx="1.8" fill="currentColor"/>`,
+  flag: `<path d="M5.4 2.6v17.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M6.8 4h10.6l-2.4 3.9 2.4 3.9H6.8z" fill="currentColor"/>`,
+  trophy: `<path d="M7 3h8v4.4a4 4 0 0 1-8 0z" fill="currentColor"/>
+      <path d="M7 4.4H4.4v1.4A3 3 0 0 0 7 8.7M15 4.4h2.6v1.4A3 3 0 0 1 15 8.7" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <path d="M11 11.4v4M7.8 19h6.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>`,
+};
+
+/**
+ * Pictogramme d'un jeu.
+ *
+ * Un jeu personnalisé n'a pas de tracé à lui : il désigne un des symboles
+ * ci-dessus. Le paramètre `symbol` est donc lu en second — d'abord le jeu
+ * édité, ensuite le symbole choisi, et un cadre vide si on n'a ni l'un ni
+ * l'autre.
+ */
+export function glyph(gameId, size = 24, symbol = null) {
+  const d = GLYPHS[gameId] ?? (symbol ? SYMBOL_GLYPHS[symbol] : null);
   if (!d) return `<svg viewBox="0 0 22 22" width="${size}" height="${size}" aria-hidden="true"></svg>`;
   return `<svg viewBox="0 0 22 22" width="${size}" height="${size}" aria-hidden="true" focusable="false">${d}</svg>`;
 }

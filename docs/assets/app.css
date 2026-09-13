@@ -171,7 +171,7 @@ button:disabled { opacity: .38; cursor: default; }
 .chip.suit.red { color: var(--red); }
 .chip.fixed { flex: 0 0 auto; min-width: 46px; }
 
-input[type="text"], input[type="number"], select {
+input[type="text"], input[type="number"], select, textarea {
   font: inherit; font-size: 16px; color: var(--ink); background: var(--bg);
   border: 1px solid var(--hairline); border-radius: 10px; padding: 10px 12px; width: 100%;
 }
@@ -200,6 +200,12 @@ label.field { display: block; font-size: 13px; color: var(--ink-2); margin-botto
 .gcard .glyph { display: flex; align-items: center; height: 28px; color: var(--ink-2); margin-bottom: 10px; }
 .gcard .gname { display: block; font-size: 15px; font-weight: 500; }
 .gcard .gtype { display: block; font-size: 12px; color: var(--ink-2); margin-top: 1px; }
+/* Créer un jeu : même gabarit que les autres cartes, mais en pointillés — la
+   case vide d'une grille, pas un jeu de plus. */
+.gcard.new { background: none; border: 1.5px dashed var(--hairline); }
+.gcard.new:hover { border-color: var(--blue); background: var(--tint); }
+.gcard.new .glyph { font-size: 24px; font-weight: 300; color: var(--blue); }
+textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
 
 .active-card {
   display: block; width: 100%; text-align: left; color: var(--ink);

@@ -97,6 +97,10 @@ Ces règles couvrent deux choses : les données de chaque compte, cloisonnées p
 identifiant, et la collection `games` — le catalogue, commun à tous et en
 **lecture seule**. Aucun client ne peut y écrire, même authentifié.
 
+Les jeux créés dans l'application, eux, appartiennent à leur auteur : ils vivent
+sous `users/{uid}/customGames/{id}`, au même titre que ses joueurs et ses
+parties. Ce n'est pas le catalogue commun, et personne d'autre ne les voit.
+
 ## Corriger une règle de jeu sans republier l'application
 
 C'est l'intérêt de la collection `games`. Un libellé maladroit ou une faute dans

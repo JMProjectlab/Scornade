@@ -99,6 +99,14 @@ struct NewGameView: View {
         .navigationTitle(game.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if CustomGame.isCustom(game.id) {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink(value: CustomGameRoute(editing: game.id)) {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .accessibilityLabel("Modifier ce jeu")
+                }
+            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button { showRules = true } label: { Image(systemName: "questionmark.circle") }
                     .disabled(game.rules.isEmpty)
