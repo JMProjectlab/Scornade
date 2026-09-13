@@ -17,6 +17,7 @@ struct CustomGameRoute: Hashable {
 /// partie** et **qui la gagne** — le reste, l'application sait déjà le tenir.
 struct CustomGameView: View {
     @EnvironmentObject var store: Store
+    @EnvironmentObject var storeKit: StoreKitService
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft: CustomGame
@@ -46,7 +47,80 @@ struct CustomGameView: View {
         CustomGame.engines.first { $0.key == draft.engine }?.help ?? ""
     }
 
+    /// Rouvrir un jeu déjà créé reste libre : il a été créé du temps où le
+    /// créateur était gratuit, et on ne reprend pas ce qu'on a donné. Seule la
+    /// création d'un jeu de plus demande l'achat.
+    private var isLocked: Bool {
+        editingID == nil && !store.canCreateCustomGame
+    }
+
     var body: some View {
+        Group {
+            if isLocked { paywall } else { editor }
+        }
+        .navigationTitle(isEditing ? "Modifier le jeu" : "Créer un jeu")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { if isLocked { await storeKit.load() } }
+    }
+
+    /// Ce qu'on montre quand le créateur n'est pas encore acheté.
+    ///
+    /// Le prix vient d'Apple, jamais du code : il est traduit et converti selon
+    /// la boutique de l'utilisateur.
+    private var paywall: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 30)).foregroundStyle(Color.brand)
+                    Text("Créez vos propres jeux").font(.title3.weight(.semibold))
+                    Text("Un nom, une façon de compter — points cumulés, compte à rebours ou manches gagnées — un objectif et un sens de victoire. Le jeu rejoint votre catalogue et se compte comme les autres.")
+                        .foregroundStyle(.secondary)
+                    Text("Achat unique. Retrouvé sur vos autres appareils et sur le site, avec le même compte.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+
+                if let message = storeKit.failure {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline).foregroundStyle(Color.danger)
+                }
+
+                VStack(spacing: 10) {
+                    Button {
+                        Task { await storeKit.buy() }
+                    } label: {
+                        Group {
+                            if storeKit.working {
+                                ProgressView()
+                            } else if let price = storeKit.displayPrice {
+                                Text("Débloquer · \(price)")
+                            } else {
+                                Text("Débloquer")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .disabled(storeKit.working || storeKit.creator == nil)
+
+                    // Obligatoire pour un non-consommable, et motif de refus
+                    // classique à l'examen quand il manque.
+                    Button("Restaurer mes achats") {
+                        Task { await storeKit.restore() }
+                    }
+                    .disabled(storeKit.working)
+                }
+
+                if store.currentUser?.isGuest == true {
+                    Text("Sans compte, l'achat reste sur cet appareil : il ne pourra pas être retrouvé sur le site.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+        }
+    }
+
+    private var editor: some View {
         Form {
             if !errors.isEmpty {
                 Section {
@@ -145,8 +219,6 @@ struct CustomGameView: View {
                 }
             }
         }
-        .navigationTitle(isEditing ? "Modifier le jeu" : "Créer un jeu")
-        .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Supprimer ce jeu ?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Supprimer", role: .destructive) {
                 if let editingID { store.deleteCustomGame(id: editingID) }

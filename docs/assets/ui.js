@@ -8,6 +8,7 @@ import { CATEGORIES, HUES, glyph } from "./data.js";
 import {
   CUSTOM_ENGINES, CUSTOM_SYMBOLS, blankCustomGame, customGameErrors, isCustomGame,
 } from "./customgames.js";
+import { canCreateCustomGame, canEditCustomGame, creatorLockReason } from "./entitlements.js";
 import * as C from "./charts.js";
 import * as E from "./engine.js";
 import * as S from "./store.js";
@@ -136,14 +137,46 @@ function screenHome() {
       <span class="gname">${esc(g.name)}</span>
       <span class="gtype">${g.team ? "Équipe" : "Individuel"}</span></button>`).join("") +
     `<button class="gcard new" data-act="new-custom">
-      <span class="glyph" aria-hidden="true">+</span>
+      <span class="glyph" aria-hidden="true">${canCreateCustomGame(S.state) ? "+" : "🔒"}</span>
       <span class="gname">Créer un jeu</span>
-      <span class="gtype">Vos propres règles de comptage</span></button></div>`;
+      <span class="gtype">${canCreateCustomGame(S.state)
+        ? "Vos propres règles de comptage"
+        : "Débloqué depuis l'application"}</span></button></div>`;
 
   return html;
 }
 
 // --- créateur de jeu ------------------------------------------------------
+
+/**
+ * Ce qu'on affiche quand le créateur n'est pas débloqué.
+ *
+ * Pas de bouton d'achat : **le site ne vend pas**. Il explique où l'achat se
+ * fait, et ce qu'il faut pour que cet achat arrive jusqu'ici.
+ */
+function screenCreatorLocked() {
+  const reason = creatorLockReason(S.state);
+  const body = reason === "connect"
+    ? `<p>Vos parties sont pour l'instant gardées <strong>sur cet appareil seulement</strong>.
+         Un achat fait dans l'application iOS ne peut donc pas être reconnu ici.</p>
+       <p>Connectez-vous avec le même compte des deux côtés, et le créateur
+         s'ouvrira sur ce site sans rien racheter.</p>`
+    : `<p>Le créateur de jeu s'achète <strong>une fois, dans l'application iOS</strong>,
+         et s'ouvre ensuite partout où vous êtes connecté avec le même compte.</p>
+       <p>Si l'achat vient d'être fait, il peut mettre quelques secondes à
+         arriver : rechargez la page.</p>`;
+
+  return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+      <button class="ghost" data-act="home">‹ Jeux</button>
+      <h1 style="flex:1;font-size:24px">Créer un jeu</h1></div>
+    <div class="card">
+      <p class="hint" style="margin-top:0">Définir vos propres règles de comptage :
+        un nom, une façon de compter, un objectif, un sens de victoire.</p>
+      ${body}
+      <p class="hint" style="margin-bottom:0">Les jeux que vous avez déjà créés
+        restent utilisables et modifiables.</p>
+    </div>`;
+}
 
 /**
  * Formulaire d'un jeu personnalisé.
@@ -153,6 +186,12 @@ function screenHome() {
  * un clic sur une pastille effacerait ce qui vient d'être tapé.
  */
 function screenCustomGame() {
+  // Modifier un jeu qui existe déjà reste libre : il a été créé du temps où le
+  // créateur était gratuit, et on ne reprend pas ce qu'on a donné. Seule la
+  // création d'un jeu de plus demande l'achat.
+  const reopening = view.customId && canEditCustomGame(S.state, view.customId);
+  if (!reopening && !canCreateCustomGame(S.state)) return screenCreatorLocked();
+
   // Comme les autres écrans : la navigation dit quoi éditer, `scratch` porte la
   // saisie en cours. Un jeu supprimé entre-temps ramène à un formulaire vierge.
   scratch.custom ??= view.customId
@@ -1139,6 +1178,10 @@ export function bindEvents() {
       }
       case "save-custom": {
         readCustomForm();
+        // Ceinture et bretelles : l'écran ne montre pas ce bouton quand le
+        // créateur est verrouillé, mais l'action ne doit pas y croire sur parole.
+        const known = S.customById(scratch.custom?.id);
+        if (!known && !canCreateCustomGame(S.state)) { render(); break; }
         const errors = customGameErrors(scratch.custom, S.state.customGames);
         if (errors.length) { scratch.customErrors = errors; render(); break; }
         const saved = S.saveCustomGame(scratch.custom);

@@ -42,8 +42,10 @@ struct HomeView: View {
                             NavigationLink(value: game) { GameCard(game: game) }
                                 .buttonStyle(.plain)
                         }
-                        NavigationLink(value: CustomGameRoute()) { NewGameCard() }
-                            .buttonStyle(.plain)
+                        NavigationLink(value: CustomGameRoute()) {
+                            NewGameCard(locked: !store.canCreateCustomGame)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding()
@@ -141,14 +143,18 @@ struct GameCard: View {
 
 /// La case vide de la grille : créer son propre jeu.
 struct NewGameCard: View {
+    /// Verrouillée tant que le créateur n'est pas acheté. La carte reste
+    /// cliquable : c'est l'écran d'après qui explique et propose l'achat.
+    var locked = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: "plus")
-                .font(.system(size: 22, weight: .light))
+            Image(systemName: locked ? "lock.fill" : "plus")
+                .font(.system(size: locked ? 18 : 22, weight: .light))
                 .foregroundStyle(Color.brand)
                 .frame(height: 24)
             Text("Créer un jeu").font(.subheadline.weight(.medium))
-            Text("Vos propres règles de comptage")
+            Text(locked ? "Achat unique" : "Vos propres règles de comptage")
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .padding(14)

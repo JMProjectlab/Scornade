@@ -11,12 +11,16 @@ final class Store: ObservableObject {
     /// Les jeux créés par l'utilisateur. Ils lui appartiennent et le suivent
     /// d'un appareil à l'autre, comme ses joueurs.
     @Published var customGames: [CustomGame] = []
+    /// Les achats reconnus. Écrits ici après validation par StoreKit, lus par
+    /// le site — qui, lui, ne vend rien.
+    @Published var purchases: [Purchase] = []
     @Published var path = NavigationPath()
     @Published var currentUser: UserAccount?
 
     private let playersKey = "sm.players"
     private let sessionsKey = "sm.sessions"
     private let customGamesKey = "sm.customGames"
+    private let purchasesKey = "sm.purchases"
     private let userKey = "sm.user"
 
     // MARK: Firestore
@@ -41,6 +45,7 @@ final class Store: ObservableObject {
     private var playersListener: ListenerRegistration?
     private var sessionsListener: ListenerRegistration?
     private var customGamesListener: ListenerRegistration?
+    private var purchasesListener: ListenerRegistration?
     private var catalogListener: ListenerRegistration?
 
     /// Change de valeur quand le catalogue est corrigé depuis Firestore.
@@ -55,6 +60,7 @@ final class Store: ObservableObject {
     private var pushedPlayers: [String: String] = [:]
     private var pushedSessions: [String: String] = [:]
     private var pushedCustomGames: [String: String] = [:]
+    private var pushedPurchases: [String: String] = [:]
 
     /// La connexion est obligatoire : sans compte Firebase authentifié, il n'y a
     /// rien à synchroniser. Le cache local sert alors de secours hors-ligne.
@@ -122,6 +128,32 @@ final class Store: ObservableObject {
     }
 
     func customGame(id: String) -> CustomGame? { customGames.first { $0.id == id } }
+
+    // MARK: Achats
+
+    /// Le créateur de jeu est-il débloqué ?
+    var ownsCreator: Bool { purchases.contains { $0.id == StoreKitService.creatorProductID } }
+
+    /// Peut-on créer un **nouveau** jeu ?
+    ///
+    /// Modifier un jeu déjà créé reste libre : le créateur a été livré gratuit,
+    /// et on ne reprend pas ce qui a été donné. Même règle que côté web.
+    var canCreateCustomGame: Bool { ownsCreator }
+
+    func grant(productID: String) {
+        guard !purchases.contains(where: { $0.id == productID }) else { return }
+        purchases.append(Purchase(id: productID,
+                                  purchasedAt: ISO8601DateFormatter().string(from: Date())))
+        save()
+    }
+
+    /// Retire un droit d'accès — remboursement, ou achat qui n'a jamais existé
+    /// sur ce compte Apple.
+    func revoke(productID: String) {
+        guard purchases.contains(where: { $0.id == productID }) else { return }
+        purchases.removeAll { $0.id == productID }
+        save()
+    }
 
     /// Recopie les jeux de l'utilisateur dans le catalogue et fait redessiner.
     private func publishCustomGames() {
@@ -396,7 +428,7 @@ final class Store: ObservableObject {
     /// en local ET côté serveur. Action irréversible (exigée par Apple).
     func deleteAllData() {
         let ids = (players.map(\.id.uuidString), sessions.map(\.id.uuidString),
-                   customGames.map(\.id))
+                   customGames.map(\.id), purchases.map(\.id))
         let wasSyncing = syncEnabled
         let user = Auth.auth().currentUser
 
@@ -404,13 +436,15 @@ final class Store: ObservableObject {
         players = []
         sessions = []
         customGames = []
+        purchases = []
         publishCustomGames()
         currentUser = nil
         path = NavigationPath()
         pushedPlayers = [:]
         pushedSessions = [:]
         pushedCustomGames = [:]
-        for key in [playersKey, sessionsKey, customGamesKey, userKey] {
+        pushedPurchases = [:]
+        for key in [playersKey, sessionsKey, customGamesKey, purchasesKey, userKey] {
             UserDefaults.standard.removeObject(forKey: key)
         }
 
@@ -421,6 +455,7 @@ final class Store: ObservableObject {
             for id in ids.0 { batch.deleteDocument(root.collection("players").document(id)) }
             for id in ids.1 { batch.deleteDocument(root.collection("sessions").document(id)) }
             for id in ids.2 { batch.deleteDocument(root.collection("customGames").document(id)) }
+            for id in ids.3 { batch.deleteDocument(root.collection("purchases").document(id)) }
             try? await batch.commit()
             // Le compte lui-même part avec les données : c'est ce qu'exige la
             // règle 5.1.1(v) d'Apple sur la suppression de compte depuis l'app.
@@ -454,6 +489,9 @@ final class Store: ObservableObject {
         if let g = try? enc.encode(customGames) {
             UserDefaults.standard.set(g, forKey: customGamesKey)
         }
+        if let a = try? enc.encode(purchases) {
+            UserDefaults.standard.set(a, forKey: purchasesKey)
+        }
     }
 
     private func load() {
@@ -469,6 +507,10 @@ final class Store: ObservableObject {
         if let g = UserDefaults.standard.data(forKey: customGamesKey),
            let decoded = try? dec.decode([CustomGame].self, from: g) {
             customGames = decoded.map { $0.normalized() }
+        }
+        if let a = UserDefaults.standard.data(forKey: purchasesKey),
+           let decoded = try? dec.decode([Purchase].self, from: a) {
+            purchases = decoded
         }
         if let u = UserDefaults.standard.data(forKey: userKey),
            let decoded = try? dec.decode(UserAccount.self, from: u) {
@@ -497,6 +539,11 @@ final class Store: ObservableObject {
             guard let snap else { return }
             let remote = Self.decodeAll(CustomGame.self, from: snap.documents)
             Task { @MainActor in self?.mergeCustomGames(remote) }
+        }
+        purchasesListener = root.collection("purchases").addSnapshotListener { [weak self] snap, _ in
+            guard let snap else { return }
+            let remote = Self.decodeAll(Purchase.self, from: snap.documents)
+            Task { @MainActor in self?.mergePurchases(remote) }
         }
 
         // Le catalogue est commun à tous les comptes : il est en lecture seule,
@@ -539,6 +586,7 @@ final class Store: ObservableObject {
         playersListener?.remove(); playersListener = nil
         sessionsListener?.remove(); sessionsListener = nil
         customGamesListener?.remove(); customGamesListener = nil
+        purchasesListener?.remove(); purchasesListener = nil
         catalogListener?.remove(); catalogListener = nil
     }
 
@@ -591,6 +639,7 @@ final class Store: ObservableObject {
         stage(players, into: "players", id: { $0.id.uuidString }, cache: &pushedPlayers)
         stage(sessions, into: "sessions", id: { $0.id.uuidString }, cache: &pushedSessions)
         stage(customGames, into: "customGames", id: { $0.id }, cache: &pushedCustomGames)
+        stage(purchases, into: "purchases", id: { $0.id }, cache: &pushedPurchases)
 
         guard writes > 0 else { return }
         batch.commit { _ in /* Firestore rejoue l'écriture au retour du réseau. */ }
@@ -613,6 +662,15 @@ final class Store: ObservableObject {
         customGames = Array(byID.values)
             .sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
         publishCustomGames()
+        saveLocalCacheOnly()
+    }
+
+    /// Les achats venus du serveur **remplacent** les locaux plutôt que de
+    /// fusionner : un remboursement doit pouvoir en retirer un. Ce que dit
+    /// StoreKit reste prioritaire — `refreshEntitlements()` repasse derrière.
+    private func mergePurchases(_ remote: [Purchase]) {
+        guard purchases != remote else { return }
+        purchases = remote
         saveLocalCacheOnly()
     }
 

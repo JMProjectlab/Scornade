@@ -1,0 +1,32 @@
+{
+  "identifier" : "scornade-local",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "3.99",
+      "familyShareable" : false,
+      "internalID" : "creator-001",
+      "localizations" : [
+        {
+          "description" : "Définissez vos propres règles de comptage : un nom, une façon de compter, un objectif. Achat unique, retrouvé sur vos autres appareils.",
+          "displayName" : "Créateur de jeu",
+          "locale" : "fr_FR"
+        },
+        {
+          "description" : "Define your own scoring rules: a name, a way to count, a target. One-time purchase, restored on your other devices.",
+          "displayName" : "Game creator",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.jmprojectlab.scornade.creator",
+      "referenceName" : "Créateur de jeu personnalisé",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [],
+  "version" : { "major" : 3, "minor" : 0 }
+}
