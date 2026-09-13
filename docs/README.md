@@ -46,6 +46,9 @@ ses propres documents.
 | Fichier | Rôle |
 |---|---|
 | `index.html` | Page unique, amorçage des modules |
+| `manifest.webmanifest` | Nom, icônes et mode plein écran — installation et app Android |
+| `sw.js` | Service worker : cache du site, mode hors ligne |
+| `assets/icons/` | Icônes dérivées de l'icône iOS (voir `android/store/`) |
 | `assets/data.js` | Les 23 jeux, leurs règles et leurs pictogrammes |
 | `assets/engine.js` | Calculs de score — portage de `Models.swift` |
 | `assets/charts.js` | Anneau, barres et jauge — SVG écrit à la main |
@@ -53,6 +56,22 @@ ses propres documents.
 | `assets/firebase.js` | Connexion et Firestore, chargés à la demande |
 | `assets/ui.js` | Rendu des écrans et interactions |
 | `assets/app.css` | Charte JMprojectlab, clair et sombre |
+
+## Hors ligne, et sur Android
+
+Le site s'installe sur l'écran d'accueil et **fonctionne sans réseau** dès la
+deuxième ouverture : `sw.js` garde le site en cache et `manifest.webmanifest`
+le déclare installable. Une partie se compte souvent là où la 4G ne passe pas,
+et les parties vivent de toute façon dans le navigateur.
+
+C'est aussi ce qui rend l'application Android possible : elle n'est pas un
+portage, c'est ce site lancé en plein écran par Chrome. Une correction poussée
+ici arrive sur Android au lancement suivant, sans nouvelle version à soumettre.
+Voir [`../android/README.md`](../android/README.md).
+
+> Après un changement dans `assets/`, penser à incrémenter `VERSION` dans
+> `sw.js` : c'est cette chaîne qui purge l'ancien cache. Sans elle, un visiteur
+> déjà venu garde l'ancienne version un lancement de plus.
 
 ## Le point de vigilance
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mode clair : les mêmes valeurs que la charte du site (app.css). -->
+    <color name="status_bar">#FFFFFFFF</color>
+    <color name="navigation_bar">#FFFFFFFF</color>
+
+    <!-- Écran de démarrage et fond de l'icône : l'encre de la charte, la même
+         qu'autour des cartes de l'icône iOS. -->
+    <color name="splash_background">#FF1D1D1F</color>
+    <color name="ic_launcher_background">#FF1D1D1F</color>
+</resources>

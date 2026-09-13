@@ -1,0 +1,36 @@
+{
+  "id": "/Scornade/",
+  "name": "Scornade — compteur de points",
+  "short_name": "Scornade",
+  "description": "Comptez les points de vos parties de belote, tarot, Yam's, fléchettes, mölkky et bien d'autres. Avec ou sans compte.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#1d1d1f",
+  "theme_color": "#ffffff",
+  "categories": ["games", "entertainment", "utilities"],
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

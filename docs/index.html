@@ -8,6 +8,10 @@
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231d1d1f'/><text x='16' y='22' font-size='15' font-family='sans-serif' font-weight='600' fill='%23fff' text-anchor='middle'>Sc</text></svg>">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Scornade">
 <link rel="stylesheet" href="assets/app.css">
 </head>
 <body>
@@ -51,6 +55,15 @@
   // Fermer la feuille des règles au clic sur le fond.
   const sheet = document.getElementById("sheet");
   sheet.addEventListener("click", (e) => { if (e.target === sheet) sheet.close(); });
+
+  // Mode hors ligne. Enregistré après le premier rendu : le service worker ne
+  // doit jamais retarder l'affichage, et son absence — navigateur ancien, page
+  // ouverte en `file://` — ne change rien au fonctionnement du site.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => { /* rien à faire : le site marche sans */ });
+    });
+  }
 </script>
 
 </body>

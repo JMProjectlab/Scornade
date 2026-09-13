@@ -12,3 +12,6 @@ DerivedData/
 
 # Firebase — propre à ton projet, pas au dépôt
 GoogleService-Info.plist
+
+# Node — seulement pour les outils (génération des visuels)
+node_modules/

@@ -1,0 +1,13 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+
+# Signature — ne doit jamais entrer dans le dépôt.
+# Perdre cette clé, c'est perdre la possibilité de mettre l'app à jour.
+*.jks
+*.keystore
+keystore.properties

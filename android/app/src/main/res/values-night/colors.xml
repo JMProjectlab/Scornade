@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mode sombre : le site passe le fond en noir pur, les barres système
+         suivent — sans quoi une bande blanche resterait en haut de l'écran. -->
+    <color name="status_bar">#FF000000</color>
+    <color name="navigation_bar">#FF000000</color>
+</resources>
