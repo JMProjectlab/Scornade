@@ -121,3 +121,32 @@ test("les trois derniers jeux ajoutés sont bien configurés", () => {
     assert.equal(gameById(id).high, false, `${id} se gagne au plus petit total`);
   }
 });
+
+// --- Mölkky : les ratés ---------------------------------------------------
+
+test("Mölkky — trois ratés d'affilée éliminent, un lancer réussi remet à zéro", () => {
+  const s = session({ molkkyMisses: [0, 0, 0], molkkyOut: [false, false, false] });
+  assert.equal(E.molkkyMiss(s, 0, true), false);
+  assert.equal(E.molkkyMiss(s, 0, true), false);
+  assert.equal(E.molkkyMiss(s, 0, true), true, "le troisième raté élimine");
+  assert.deepEqual(s.molkkyOut, [true, false, false]);
+
+  E.molkkyMiss(s, 1, true);
+  E.molkkyMiss(s, 1, true);
+  E.molkkyMiss(s, 1, false);
+  E.molkkyMiss(s, 1, true);
+  assert.equal(s.molkkyOut[1], false, "le compteur repart de zéro après un lancer réussi");
+});
+
+test("Mölkky — une partie venue de l'app iOS n'a pas les compteurs, et ne doit pas planter", () => {
+  const s = session();                       // ni molkkyMisses ni molkkyOut
+  assert.doesNotThrow(() => E.molkkyMiss(s, 0, true));
+  assert.deepEqual(s.molkkyMisses, [1, 0, 0]);
+  assert.deepEqual(s.molkkyOut, [false, false, false]);
+});
+
+test("Mölkky — un joueur déjà éliminé ne l'est pas une seconde fois", () => {
+  const s = session({ molkkyMisses: [3, 0, 0], molkkyOut: [true, false, false] });
+  assert.equal(E.molkkyMiss(s, 0, true), false, "pas de second message d'élimination");
+  assert.equal(s.molkkyOut[0], true);
+});

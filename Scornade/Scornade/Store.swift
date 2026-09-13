@@ -104,6 +104,13 @@ final class Store: ObservableObject {
             roundLimit: game.roundLimit > 0 ? game.roundLimit : nil,
             phaseRounds: game.engine == .phaseRace ? [] : nil
         )
+        var session = session
+        // Mölkky : les compteurs de ratés naissent avec la partie, comme côté
+        // web. Les créer plus tard obligerait chaque lecteur à gérer le cas nil.
+        if game.id == "molkky" {
+            session.molkkyMisses = Array(repeating: 0, count: entrants.count)
+            session.molkkyOut = Array(repeating: false, count: entrants.count)
+        }
         sessions.insert(session, at: 0)
         save()
         return session
@@ -149,6 +156,16 @@ final class Store: ObservableObject {
         let flags = (0..<n).map { completed.indices.contains($0) && completed[$0] }
         sessions[i].phaseRounds = (sessions[i].phaseRounds ?? []) + [flags]
         sessions[i].rounds.append((0..<n).map { deltas.indices.contains($0) ? deltas[$0] : 0 })
+        save()
+    }
+
+    /// Mölkky : un lancer, ses points et son compteur de ratés.
+    ///
+    /// Les deux s'écrivent ensemble ou pas du tout : une manche enregistrée
+    /// sans son raté laisserait un joueur éliminable à jamais.
+    func addMolkkyThrow(sessionID: UUID, player: Int, delta: Int, missed: Bool) {
+        guard let i = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[i].recordMolkkyThrow(player: player, delta: delta, missed: missed)
         save()
     }
 
@@ -287,6 +304,10 @@ final class Store: ObservableObject {
         // Le tableau vide dit « cette partie suit des phases » ; le mettre à nil
         // ferait retomber Phase 10 sur le décompte ordinaire.
         if s.phaseRounds != nil { s.phaseRounds = [] }
+        if s.molkkyMisses != nil {
+            s.molkkyMisses = Array(repeating: 0, count: s.entrants.count)
+            s.molkkyOut = Array(repeating: false, count: s.entrants.count)
+        }
         s.manuallyFinished = false
         sessions[i] = s
         save()

@@ -74,6 +74,14 @@ struct ScoreSession: Identifiable, Codable, Hashable {
     var pot: Int? = nil           // 421 : jetons restant dans la cave
     var jetons: [Int]? = nil      // 421 : jetons par joueur
     var roundLimit: Int? = nil    // nombre de manches imposé par la règle (Cinq Rois : 11)
+    /// Mölkky : ratés consécutifs par joueur, et joueurs éliminés.
+    ///
+    /// Ces deux-là appartiennent à la partie, pas à l'écran : trois ratés
+    /// d'affilée éliminent un joueur, et cette élimination doit survivre à un
+    /// retour à l'accueil, à une relance de l'application et au passage sur un
+    /// autre appareil. Mêmes noms que côté web — c'est le même document JSON.
+    var molkkyMisses: [Int]? = nil
+    var molkkyOut: [Bool]? = nil
     /// Phase 10 : pour chaque manche, qui a validé sa phase.
     ///
     /// C'est la trace qui compte, pas un compteur : une manche annulée doit
@@ -95,6 +103,31 @@ struct ScoreSession: Identifiable, Codable, Hashable {
     var belotePending: Int {
         guard let last = beloteRounds?.last, last.isLitige else { return 0 }
         return (last.pending ?? 0) + BeloteRound.litigePoints
+    }
+
+    /// Mölkky : ce joueur est-il éliminé ?
+    func isOut(_ i: Int) -> Bool { molkkyOut?.indices.contains(i) == true && molkkyOut![i] }
+
+    /// Mölkky : enregistre un lancer — ses points et son raté.
+    ///
+    /// Les deux vont ensemble : trois ratés d'affilée éliminent, et un lancer
+    /// réussi remet le compteur à zéro. Même règle que `molkkyThrow` côté web.
+    mutating func recordMolkkyThrow(player: Int, delta: Int, missed: Bool) {
+        let n = entrants.count
+        var deltas = Array(repeating: 0, count: n)
+        if deltas.indices.contains(player) { deltas[player] = delta }
+        rounds.append(deltas)
+
+        var misses = molkkyMisses ?? Array(repeating: 0, count: n)
+        var out = molkkyOut ?? Array(repeating: false, count: n)
+        if misses.count != n { misses = Array(repeating: 0, count: n) }
+        if out.count != n { out = Array(repeating: false, count: n) }
+        if misses.indices.contains(player) {
+            misses[player] = missed ? misses[player] + 1 : 0
+            if misses[player] >= 3 { out[player] = true }
+        }
+        molkkyMisses = misses
+        molkkyOut = out
     }
 
     /// Phase 10 : la phase en cours d'un joueur, de 1 à 10, puis 11 une fois
