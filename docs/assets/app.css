@@ -269,11 +269,15 @@ textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
 .result { border-radius: 12px; padding: 12px 14px; font-size: 14px; margin-bottom: 12px; }
 .result.ok { background: var(--green-bg); color: var(--green); }
 .result.ko { background: var(--red-bg); color: var(--red); }
+/* Litige : ni contrat tenu ni chute — la donne reste en suspens, d'où le
+   traitement informatif plutôt que vert ou rouge. */
+.result.tie { background: var(--tint); color: var(--blue-deep); }
 .result b { display: block; font-weight: 600; margin-bottom: 5px; }
 .result .ln { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
 
 .note { font-size: 14px; font-weight: 500; color: var(--red); margin-top: 10px; }
 .note.ok { color: var(--green); }
+.note.tie { color: var(--blue-deep); }
 
 .hist { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 9px 0; border-top: 1px solid var(--hairline); }
 .hist .ix { color: var(--ink-2); width: 32px; flex-shrink: 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
@@ -281,6 +285,7 @@ textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
 .hist .st { font-weight: 600; font-size: 12px; }
 .hist .st.ok { color: var(--green); }
 .hist .st.ko { color: var(--red); }
+.hist .st.tie { color: var(--blue-deep); }
 
 /* Une manche se touche pour la corriger : c'est un bouton, mais il doit se
    fondre dans la ligne plutôt que ressembler à une commande de plus. */

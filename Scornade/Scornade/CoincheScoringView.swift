@@ -189,11 +189,13 @@ struct CoincheScoringView: View {
                 Spacer()
                 Text(capot ? "Capot" : "objectif \(values[contractIdx])").font(.caption).foregroundStyle(.secondary)
             }
+            // Même pas qu'à la belote : de 10 en 10 seulement, la moindre
+            // correction obligeait à saisir le chiffre exact au clavier.
             HStack(spacing: 6) {
-                Button { setPoints(takerPoints - 10) } label: { Image(systemName: "minus") }.buttonStyle(.bordered)
+                stepButton(-10); stepButton(-1)
                 TextField("0", text: $takerPointsStr).keyboardType(.numberPad)
                     .multilineTextAlignment(.center).frame(maxWidth: .infinity)
-                Button { setPoints(takerPoints + 10) } label: { Image(systemName: "plus") }.buttonStyle(.bordered)
+                stepButton(1); stepButton(10)
             }
             Text("Défense : \(defenderPts) points").font(.caption).foregroundStyle(.secondary)
         }
@@ -286,6 +288,15 @@ struct CoincheScoringView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
+    }
+
+    private func stepButton(_ step: Int) -> some View {
+        Button { setPoints(takerPoints + step) } label: {
+            Text(verbatim: step > 0 ? "+\(step)" : "\(step)")
+                .font(.caption2.weight(.medium))
+                .frame(minWidth: 30, minHeight: 24)
+        }
+        .buttonStyle(.bordered)
     }
 
     private func setPoints(_ v: Int) { takerPointsStr = String(min(162, max(0, v))) }

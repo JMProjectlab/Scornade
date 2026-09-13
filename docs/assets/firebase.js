@@ -18,6 +18,7 @@ let db = null;
 let unsubPlayers = null;
 let unsubSessions = null;
 let unsubCustomGames = null;
+let unsubPurchases = null;
 const pushed = { players: new Map(), sessions: new Map(), customGames: new Map() };
 
 /** Lit la configuration si elle a été déposée à côté. */
@@ -145,6 +146,12 @@ function startListening(userId) {
   unsubCustomGames = mods.onSnapshot(mods.collection(root, "customGames"), (snap) => {
     mergeRemote({ customGames: decode(snap) });
   });
+  // Les achats sont **lus seulement**. C'est l'app iOS qui les écrit, après
+  // validation par StoreKit : le site ne vend pas, donc il n'a rien à écrire
+  // ici — et `push` ne les met délibérément pas en file.
+  unsubPurchases = mods.onSnapshot(mods.collection(root, "purchases"), (snap) => {
+    mergeRemote({ purchases: decode(snap) });
+  });
 
   state.sync = { push, stop: stopListening, deleteAll };
   push(state);
@@ -154,6 +161,7 @@ function stopListening() {
   unsubPlayers?.(); unsubPlayers = null;
   unsubSessions?.(); unsubSessions = null;
   unsubCustomGames?.(); unsubCustomGames = null;
+  unsubPurchases?.(); unsubPurchases = null;
   unsubCatalog?.(); unsubCatalog = null;
 }
 
@@ -198,10 +206,10 @@ async function deleteAll() {
   if (!user) return;
   const root = mods.doc(db, "users", user.uid);
   const batch = mods.writeBatch(db);
-  for (const name of ["players", "sessions", "customGames"]) {
+  for (const name of ["players", "sessions", "customGames", "purchases"]) {
     const snap = await mods.getDocs(mods.collection(root, name));
     snap.forEach((d) => batch.delete(d.ref));
-    pushed[name].clear();
+    pushed[name]?.clear();
   }
   try {
     await batch.commit();

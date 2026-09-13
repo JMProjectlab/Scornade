@@ -4,6 +4,7 @@ import GoogleSignIn
 @main
 struct ScornadeApp: App {
     @StateObject private var store = Store()
+    @StateObject private var storeKit = StoreKitService()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("sm.languagePreference") private var languagePreference = "system"
 
@@ -29,6 +30,14 @@ struct ScornadeApp: App {
                 }
             }
             .environmentObject(store)
+            .environmentObject(storeKit)
+            // Le service d'achat écrit le droit d'accès dans le store ; il ne
+            // décide de rien lui-même. On les attache ici plutôt qu'au
+            // démarrage : les deux objets existent alors pour de bon.
+            .task {
+                storeKit.attach(store)
+                await storeKit.refreshEntitlements()
+            }
             .tint(Color.brand)
             .environment(\.locale, localeOverride ?? Locale.autoupdatingCurrent)
             .onOpenURL { url in
@@ -37,7 +46,12 @@ struct ScornadeApp: App {
             }
         }
         .onChange(of: scenePhase) { phase in
-            if phase == .active { store.reloadFromCloud() }
+            if phase == .active {
+                store.reloadFromCloud()
+                // Ce qu'Apple considère comme acquis fait foi : un achat fait
+                // ailleurs, ou remboursé, se reflète au retour dans l'app.
+                Task { await storeKit.refreshEntitlements() }
+            }
         }
     }
 }

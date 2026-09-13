@@ -11,10 +11,12 @@
 import { HUES, GAMES, gameById as bundledGameById } from "./data.js";
 import { isFinished, winnerIndex } from "./engine.js";
 import { normalizeCustomGame, toGame } from "./customgames.js";
+import { ownsCreator } from "./entitlements.js";
 
 const KEY_PLAYERS = "sm.players";
 const KEY_SESSIONS = "sm.sessions";
 const KEY_CUSTOM = "sm.customGames";
+const KEY_PURCHASES = "sm.purchases";
 const KEY_USER = "sm.user";
 const KEY_LANG = "sm.languagePreference";
 const KEY_THEME = "sm.theme";
@@ -24,6 +26,8 @@ export const state = {
   sessions: [],
   /** Jeux créés par l'utilisateur. Synchronisés comme les joueurs. */
   customGames: [],
+  /** Achats reconnus. **Écrits par l'app iOS, lus ici** — le site ne vend pas. */
+  purchases: [],
   user: null,
   filter: "all",
   /** Renseigné par firebase.js quand la synchronisation est active. */
@@ -58,6 +62,7 @@ export function load() {
   state.players = readJSON(KEY_PLAYERS, []);
   state.sessions = readJSON(KEY_SESSIONS, []);
   state.customGames = readJSON(KEY_CUSTOM, []).map(normalizeCustomGame);
+  state.purchases = readJSON(KEY_PURCHASES, []);
   state.user = readJSON(KEY_USER, null);
 }
 
@@ -65,6 +70,7 @@ function persistLocal() {
   writeJSON(KEY_PLAYERS, state.players);
   writeJSON(KEY_SESSIONS, state.sessions);
   writeJSON(KEY_CUSTOM, state.customGames);
+  writeJSON(KEY_PURCHASES, state.purchases);
 }
 
 /** Enregistre, pousse vers Firestore si branché, puis redessine. */
@@ -111,8 +117,10 @@ export async function deleteEverything() {
   state.players = [];
   state.sessions = [];
   state.customGames = [];
+  state.purchases = [];
   state.sync = null;
-  [KEY_PLAYERS, KEY_SESSIONS, KEY_CUSTOM, KEY_USER].forEach((k) => localStorage.removeItem(k));
+  [KEY_PLAYERS, KEY_SESSIONS, KEY_CUSTOM, KEY_PURCHASES, KEY_USER]
+    .forEach((k) => localStorage.removeItem(k));
   state.user = null;
   emit();
   await sync?.deleteAll();
@@ -149,6 +157,9 @@ export const allGames = () => [...GAMES, ...state.customGames.map(toGame)];
 export const gameById = (id) => bundledGameById(id) ?? customAsGame(id);
 
 export const customById = (id) => state.customGames.find((g) => g.id === id);
+
+/** Raccourci de lecture : le créateur de jeu est-il débloqué ? */
+export const hasCreator = () => ownsCreator(state);
 
 const customAsGame = (id) => {
   const c = customById(id);
@@ -324,7 +335,7 @@ export function deleteSession(id) {
  * ne supprime rien : elle peut simplement signifier que l'entrée locale n'a pas
  * encore été poussée.
  */
-export function mergeRemote({ players, sessions, customGames }) {
+export function mergeRemote({ players, sessions, customGames, purchases }) {
   if (players?.length) {
     const byId = new Map(state.players.map((p) => [p.id, p]));
     players.forEach((p) => byId.set(p.id, p));
@@ -339,6 +350,11 @@ export function mergeRemote({ players, sessions, customGames }) {
     const byId = new Map(state.customGames.map((g) => [g.id, g]));
     customGames.forEach((g) => byId.set(g.id, normalizeCustomGame(g)));
     state.customGames = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  if (purchases) {
+    // Les achats font foi côté serveur : ils remplacent, ils ne fusionnent pas.
+    // Un achat remboursé par Apple doit pouvoir disparaître d'ici.
+    state.purchases = purchases.filter((p) => p && typeof p.id === "string");
   }
   persistLocal();
   emit();

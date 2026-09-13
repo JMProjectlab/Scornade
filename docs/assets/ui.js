@@ -8,6 +8,7 @@ import { CATEGORIES, HUES, glyph } from "./data.js";
 import {
   CUSTOM_ENGINES, CUSTOM_SYMBOLS, blankCustomGame, customGameErrors, isCustomGame,
 } from "./customgames.js";
+import { canCreateCustomGame, canEditCustomGame, creatorLockReason } from "./entitlements.js";
 import * as C from "./charts.js";
 import * as E from "./engine.js";
 import * as S from "./store.js";
@@ -136,14 +137,46 @@ function screenHome() {
       <span class="gname">${esc(g.name)}</span>
       <span class="gtype">${g.team ? "Équipe" : "Individuel"}</span></button>`).join("") +
     `<button class="gcard new" data-act="new-custom">
-      <span class="glyph" aria-hidden="true">+</span>
+      <span class="glyph" aria-hidden="true">${canCreateCustomGame(S.state) ? "+" : "🔒"}</span>
       <span class="gname">Créer un jeu</span>
-      <span class="gtype">Vos propres règles de comptage</span></button></div>`;
+      <span class="gtype">${canCreateCustomGame(S.state)
+        ? "Vos propres règles de comptage"
+        : "Débloqué depuis l'application"}</span></button></div>`;
 
   return html;
 }
 
 // --- créateur de jeu ------------------------------------------------------
+
+/**
+ * Ce qu'on affiche quand le créateur n'est pas débloqué.
+ *
+ * Pas de bouton d'achat : **le site ne vend pas**. Il explique où l'achat se
+ * fait, et ce qu'il faut pour que cet achat arrive jusqu'ici.
+ */
+function screenCreatorLocked() {
+  const reason = creatorLockReason(S.state);
+  const body = reason === "connect"
+    ? `<p>Vos parties sont pour l'instant gardées <strong>sur cet appareil seulement</strong>.
+         Un achat fait dans l'application iOS ne peut donc pas être reconnu ici.</p>
+       <p>Connectez-vous avec le même compte des deux côtés, et le créateur
+         s'ouvrira sur ce site sans rien racheter.</p>`
+    : `<p>Le créateur de jeu s'achète <strong>une fois, dans l'application iOS</strong>,
+         et s'ouvre ensuite partout où vous êtes connecté avec le même compte.</p>
+       <p>Si l'achat vient d'être fait, il peut mettre quelques secondes à
+         arriver : rechargez la page.</p>`;
+
+  return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+      <button class="ghost" data-act="home">‹ Jeux</button>
+      <h1 style="flex:1;font-size:24px">Créer un jeu</h1></div>
+    <div class="card">
+      <p class="hint" style="margin-top:0">Définir vos propres règles de comptage :
+        un nom, une façon de compter, un objectif, un sens de victoire.</p>
+      ${body}
+      <p class="hint" style="margin-bottom:0">Les jeux que vous avez déjà créés
+        restent utilisables et modifiables.</p>
+    </div>`;
+}
 
 /**
  * Formulaire d'un jeu personnalisé.
@@ -153,6 +186,12 @@ function screenHome() {
  * un clic sur une pastille effacerait ce qui vient d'être tapé.
  */
 function screenCustomGame() {
+  // Modifier un jeu qui existe déjà reste libre : il a été créé du temps où le
+  // créateur était gratuit, et on ne reprend pas ce qu'on a donné. Seule la
+  // création d'un jeu de plus demande l'achat.
+  const reopening = view.customId && canEditCustomGame(S.state, view.customId);
+  if (!reopening && !canCreateCustomGame(S.state)) return screenCreatorLocked();
+
   // Comme les autres écrans : la navigation dit quoi éditer, `scratch` porte la
   // saisie en cours. Un jeu supprimé entre-temps ramène à un formulaire vierge.
   scratch.custom ??= view.customId
@@ -513,6 +552,8 @@ function scoringBelote(session) {
   const p1 = parseInt(f.p1, 10) || 0;
   const sum = p0 + p1;
   const canValidate = f.taker !== null && f.suit !== null && (f.capot !== null || sum === 162);
+  // Points laissés en jeu par un litige : ils iront au camp qui gagne la donne.
+  const pending = E.belotePending(session.beloteRounds ?? []);
 
   let left = "";
   if (session.seriesWins) {
@@ -534,10 +575,12 @@ function scoringBelote(session) {
   const rows = session.beloteRounds?.length
     ? session.beloteRounds.map((r, i) => ({ r, i })).reverse().map(({ r, i }) => {
         const d = E.beloteDeltas(r);
-        const made = E.beloteContractMade(r);
+        const outcome = E.beloteOutcome(r);
+        const mark = { fait: "✓", litige: "litige", chute: "chute" }[outcome];
+        const cls = { fait: "ok", litige: "tie", chute: "ko" }[outcome];
         return `<div class="hist"><span class="ix">D${i + 1}</span>
           <span class="dt">É${r.takerTeam + 1} prend ${r.suit}</span>
-          <span class="st ${made ? "ok" : "ko"}">${made ? "✓" : "chute"}</span>
+          <span class="st ${cls}">${mark}</span>
           <span class="tab" style="font-size:13px">${d[0]} – ${d[1]}</span>
           <button class="icon-btn" data-act="del-round" data-i="${i}"
             aria-label="Supprimer la donne ${i + 1}">✕</button></div>`;
@@ -560,7 +603,10 @@ function scoringBelote(session) {
       `</div><p class="hint">Atout</p><div class="chips">` +
       ["♠", "♥", "♦", "♣"].map((s) => `<button class="chip suit${s === "♥" || s === "♦" ? " red" : ""}"
         data-act="b-suit" data-v="${s}" aria-pressed="${f.suit === s}">${s}</button>`).join("") +
-      `</div><p class="hint">Points aux cartes (total 162)</p>
+      `</div>` +
+      (pending ? `<p class="note tie" style="margin:12px 0 0">${pending} points sont en jeu, laissés par le
+         litige : ils reviennent au camp qui remporte cette donne.</p>` : "") +
+      `<p class="hint">Points aux cartes (total 162)</p>
       <div style="display:flex;gap:12px;margin-bottom:10px">
         <div style="flex:1"><label class="field" for="b-p0">Équipe 1</label>
           <input type="number" inputmode="numeric" class="num b-pts" id="b-p0" data-t="0"
@@ -580,12 +626,23 @@ function scoringBelote(session) {
         <button class="chip" data-act="b-capot" data-v="1" aria-pressed="${f.capot === 1}">Capot É2</button></div>`;
 
     if (canValidate) {
-      const round = { takerTeam: f.taker, suit: f.suit, cardPoints: [p0, p1], belote: [f.b0, f.b1], capotTeam: f.capot };
+      const round = { takerTeam: f.taker, suit: f.suit, cardPoints: [p0, p1],
+                      belote: [f.b0, f.b1], capotTeam: f.capot, pending };
       const d = E.beloteDeltas(round);
-      const made = E.beloteContractMade(round);
-      right += `<div class="result ${made ? "ok" : "ko"}">
-        <b>${made ? `${esc(session.entrants[f.taker].name)} réussit son contrat ${f.suit}`
-                  : `${esc(session.entrants[f.taker].name)} est dedans — chute !`}</b>
+      const outcome = E.beloteOutcome(round);
+      const takerName = esc(session.entrants[f.taker].name);
+      const title = {
+        fait: `${takerName} réussit son contrat ${f.suit}`,
+        litige: `Litige — 81 partout`,
+        chute: `${takerName} est dedans — chute !`,
+      }[outcome];
+      const cls = { fait: "ok", litige: "tie", chute: "ko" }[outcome];
+      right += `<div class="result ${cls}">
+        <b>${title}</b>
+        ${outcome === "litige"
+          ? `<p style="margin:0 0 6px;font-size:13px">${takerName} ne marque rien : ses ${E.BELOTE_LITIGE} points
+             sont remis en jeu pour la donne suivante, où ${pending + E.BELOTE_LITIGE} points seront en jeu.</p>`
+          : ""}
         <div class="ln"><span>Équipe 1</span><span>+${d[0]} pts</span></div>
         <div class="ln"><span>Équipe 2</span><span>+${d[1]} pts</span></div></div>`;
     }
@@ -1121,6 +1178,10 @@ export function bindEvents() {
       }
       case "save-custom": {
         readCustomForm();
+        // Ceinture et bretelles : l'écran ne montre pas ce bouton quand le
+        // créateur est verrouillé, mais l'action ne doit pas y croire sur parole.
+        const known = S.customById(scratch.custom?.id);
+        if (!known && !canCreateCustomGame(S.state)) { render(); break; }
         const errors = customGameErrors(scratch.custom, S.state.customGames);
         if (errors.length) { scratch.customErrors = errors; render(); break; }
         const saved = S.saveCustomGame(scratch.custom);
@@ -1269,6 +1330,9 @@ export function bindEvents() {
           takerTeam: f.taker, suit: f.suit,
           cardPoints: [parseInt(f.p0, 10) || 0, parseInt(f.p1, 10) || 0],
           belote: [f.b0, f.b1], capotTeam: f.capot,
+          // Les points en jeu sont inscrits dans la donne : le détail affiché
+          // reste celui qui a servi au calcul, même des mois plus tard.
+          pending: E.belotePending(session.beloteRounds ?? []),
         };
         session.beloteRounds.push(round);
         S.addRound(session, E.beloteDeltas(round));
