@@ -1124,13 +1124,9 @@ export function bindEvents() {
         const score = Number(el.dataset.v);
         const before = scratch.current;
         playTurn(session, E.molkkyThrow(session, before, score));
-        if (score === 0) {
-          session.molkkyMisses[before] += 1;
-          if (session.molkkyMisses[before] >= 3) {
-            session.molkkyOut[before] = true;
-            scratch.note = "Trois ratés — joueur éliminé.";
-          }
-        } else session.molkkyMisses[before] = 0;
+        if (E.molkkyMiss(session, before, score === 0)) {
+          scratch.note = "Trois ratés — joueur éliminé.";
+        }
         S.commit();
         render();
         break;

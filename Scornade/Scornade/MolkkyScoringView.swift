@@ -8,8 +8,6 @@ struct MolkkyScoringView: View {
     @State private var current = 0
     @State private var entryStr = ""
     @State private var note: String?
-    @State private var missStreak: [Int] = []
-    @State private var eliminated: [Bool] = []
 
     private let quick = Array(1...12)
     private var session: ScoreSession? { store.session(id: sessionID) }
@@ -26,12 +24,11 @@ struct MolkkyScoringView: View {
                 .foregroundStyle(.secondary)
             }
         }
-        .onAppear { ensureTracking(count: session?.entrants.count ?? 0) }
+        .onAppear { if let s = session { current = firstActive(s) } }
     }
 
     @ViewBuilder
     private func content(_ session: ScoreSession) -> some View {
-        let _ = ensureTracking(count: session.entrants.count)
         ScrollView {
             VStack(spacing: 14) {
                 scoreboard(session)
@@ -57,11 +54,11 @@ struct MolkkyScoringView: View {
         return VStack(spacing: 8) {
             ForEach(session.entrants.indices, id: \.self) { i in
                 let pair = Palette.pair(session.entrants[i].colorIndex)
-                Button { if !isEliminated(i) { current = i } } label: {
+                Button { if !session.isOut(i) { current = i } } label: {
                     HStack(spacing: 10) {
                         Avatar(name: session.entrants[i].name, colorIndex: session.entrants[i].colorIndex, size: 30)
                         Text(session.entrants[i].name).font(.subheadline)
-                        if isEliminated(i) {
+                        if session.isOut(i) {
                             Text("éliminé").font(.caption2.weight(.medium)).foregroundStyle(Color.danger)
                         } else if i == leader, session.rounds.count > 0 {
                             Image(systemName: "cylinder.fill").font(.caption2).foregroundStyle(Color.brand)
@@ -70,12 +67,12 @@ struct MolkkyScoringView: View {
                         Text("\(session.total(i))").font(.jmScore(22))
                     }
                     .padding(.horizontal, 12).padding(.vertical, 10)
-                    .background(pair.bg.opacity(isEliminated(i) ? 0.15 : (current == i ? 0.6 : 0.35)))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(current == i && !isEliminated(i) ? Color.brand : Color.clear, lineWidth: 2))
+                    .background(pair.bg.opacity(session.isOut(i) ? 0.15 : (current == i ? 0.6 : 0.35)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(current == i && !session.isOut(i) ? Color.brand : Color.clear, lineWidth: 2))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
                 .buttonStyle(.plain)
-                .disabled(isEliminated(i))
+                .disabled(session.isOut(i))
             }
         }
     }
@@ -148,7 +145,7 @@ struct MolkkyScoringView: View {
         guard score >= 0, score <= 12 else { return }
         let currentTotal = session.total(current)
         let newTotal = currentTotal + score
-        var delta: Int
+        let delta: Int
         if newTotal > 50 {
             delta = 25 - currentTotal
             note = String(localized: "Raté ! Retour à 25 points.", locale: locale)
@@ -156,23 +153,17 @@ struct MolkkyScoringView: View {
             delta = score
             note = nil
         }
-        record(session, delta)
-
-        if score == 0 {
-            missStreak[current] += 1
-            if missStreak[current] >= 3 { eliminated[current] = true }
-        } else {
-            missStreak[current] = 0
-        }
+        // Les points et le raté partent ensemble dans la partie : c'est elle qui
+        // porte les éliminations, pas cet écran.
+        store.addMolkkyThrow(sessionID: sessionID, player: current,
+                             delta: delta, missed: score == 0)
 
         entryStr = ""
-        if newTotal != 50 { advance(session) }
-    }
-
-    private func record(_ session: ScoreSession, _ delta: Int) {
-        var deltas = Array(repeating: 0, count: session.entrants.count)
-        if deltas.indices.contains(current) { deltas[current] = delta }
-        store.addRound(sessionID: sessionID, deltas: deltas)
+        // On relit la partie : le tour suivant doit sauter le joueur que ce
+        // lancer vient peut-être d'éliminer.
+        if newTotal != 50, let updated = store.session(id: sessionID) {
+            advance(updated)
+        }
     }
 
     private func advance(_ session: ScoreSession) {
@@ -180,29 +171,18 @@ struct MolkkyScoringView: View {
         guard n > 0 else { return }
         var next = (current + 1) % n
         var loops = 0
-        while isEliminated(next), loops < n {
+        while session.isOut(next), loops < n {
             next = (next + 1) % n
             loops += 1
         }
         current = next
     }
 
-    private func isEliminated(_ i: Int) -> Bool { eliminated.indices.contains(i) && eliminated[i] }
-
-    private func ensureTracking(count: Int) {
-        if missStreak.count != count {
-            DispatchQueue.main.async {
-                if missStreak.count != count {
-                    missStreak = Array(repeating: 0, count: count)
-                    eliminated = Array(repeating: false, count: count)
-                }
-            }
-        }
+    /// Le premier joueur encore en lice, pour ne pas rouvrir l'écran sur un
+    /// joueur éliminé.
+    private func firstActive(_ session: ScoreSession) -> Int {
+        session.entrants.indices.first { !session.isOut($0) } ?? 0
     }
 
-    private func resetTracking() {
-        missStreak = Array(repeating: 0, count: missStreak.count)
-        eliminated = Array(repeating: false, count: eliminated.count)
-        current = 0
-    }
+    private func resetTracking() { current = 0 }
 }
