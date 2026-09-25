@@ -100,6 +100,7 @@ function screenLogin() {
     <div class="sep">ou</div>
     <button class="btn outline" data-act="sign-google">Se connecter avec Google</button>
     <p class="legal">Un compte permet de retrouver vos parties sur vos autres appareils.<br>
+      <a href="https://apps.apple.com/fr/app/id6802812197">Application iPhone</a> ·
       <a href="politique-de-confidentialite.html">Politique de confidentialité</a></p>
   </div>`;
 }
@@ -912,6 +913,7 @@ export function render() {
         ${view.screen === key ? 'aria-current="page"' : ""}>${label}</button>`).join("") +
     `<div class="rail-foot">
       ${S.state.user ? `<button class="rail-link" data-act="sign-out">Se déconnecter</button>` : ""}
+      <a class="rail-link" href="https://apps.apple.com/fr/app/id6802812197">Application iPhone</a>
       <a class="rail-link" href="politique-de-confidentialite.html">Confidentialité</a>
     </div></nav>`;
 

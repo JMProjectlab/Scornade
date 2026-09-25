@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2997FF"/>
+      <stop offset="1" stop-color="#0058B0"/>
+    </linearGradient>
+    <filter id="sh" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#002a5c" flood-opacity="0.35"/>
+    </filter>
+    <path id="heart" d="M0,-30 C-8,-58 -60,-58 -60,-18 C-60,14 -24,38 0,62 C24,38 60,14 60,-18 C60,-58 8,-58 0,-30 Z"/>
+    <path id="spade" d="M0,-62 C-24,-34 -60,-14 -60,18 C-60,46 -30,58 -8,40 L-18,70 L18,70 L8,40 C30,58 60,46 60,18 C60,-14 24,-34 0,-62 Z"/>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <!-- carte arrière : pique -->
+  <g transform="translate(430 520) rotate(-14)" filter="url(#sh)">
+    <rect x="-190" y="-265" width="380" height="530" rx="44" fill="#E8F1FF"/>
+    <use href="#spade" transform="translate(-118 -178) scale(0.62)" fill="#1D1D1F"/>
+    <use href="#spade" transform="translate(118 178) rotate(180) scale(0.62)" fill="#1D1D1F"/>
+  </g>
+  <!-- carte avant : cœur -->
+  <g transform="translate(600 530) rotate(9)" filter="url(#sh)">
+    <rect x="-190" y="-265" width="380" height="530" rx="44" fill="#FFFFFF"/>
+    <use href="#heart" transform="translate(-118 -178) scale(0.62)" fill="#FF3B30"/>
+    <use href="#heart" transform="translate(118 178) rotate(180) scale(0.62)" fill="#FF3B30"/>
+    <use href="#heart" transform="translate(0 0) scale(1.6)" fill="#FF3B30"/>
+  </g>
+  <!-- pastille « + » : on compte -->
+  <g transform="translate(800 240)" filter="url(#sh)">
+    <circle r="112" fill="#FFCC00"/>
+    <rect x="-62" y="-17" width="124" height="34" rx="17" fill="#1D1D1F"/>
+    <rect x="-17" y="-62" width="34" height="124" rx="17" fill="#1D1D1F"/>
+  </g>
+</svg>
