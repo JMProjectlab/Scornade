@@ -1,18 +1,25 @@
-/* Scornade — charte JMprojectlab.
-   Deux neutres portent l'interface ; le bleu ne marque que ce qui est
-   actionnable ou sélectionné. Mise en page : une colonne sur téléphone,
-   rail latéral et deux colonnes à partir de 900 px. */
+/* Scornade — thème « nuit et braise », repris de l'icône.
+   Un fond nuit-violet, des surfaces violettes à peine plus claires, et un seul
+   accent : la braise en sombre, le violet en clair. Il ne marque que ce qui
+   est actionnable ou sélectionné. Le sombre est le thème par défaut ; le
+   clair reste proposé dans les réglages.
+   Les noms --blue et --blue-deep sont historiques : ils portent l'accent,
+   quelle que soit sa teinte. Mise en page : une colonne sur téléphone, rail
+   latéral et deux colonnes à partir de 900 px. */
 
 :root {
-  --ink: #1d1d1f;
-  --ink-2: #6e6e73;
+  /* Thème clair. */
+  --ink: #1a1033;
+  --ink-2: #6b6485;
   --bg: #ffffff;
-  --bg-alt: #f5f5f7;
-  --hairline: #d2d2d7;
-  --blue: #0071e3;
-  --blue-deep: #0058b0;
-  --tint: rgba(0, 113, 227, .12);
-  --neutral-tint: rgba(29, 29, 31, .08);
+  --bg-alt: #f5f2fc;
+  --hairline: #e2dcf0;
+  --blue: #6d28d9;
+  --blue-deep: #5b21b6;
+  --on-accent: #ffffff;
+  --accent-fill: #6d28d9;
+  --tint: rgba(109, 40, 217, .12);
+  --neutral-tint: rgba(26, 16, 51, .08);
   --green: #248a3d;
   --green-bg: rgba(52, 199, 89, .14);
   --red: #d70015;
@@ -20,7 +27,8 @@
   --orange: #ff9500;
   --yellow: #e5b800;
   --radius: 14px;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 24px rgba(0, 0, 0, .06);
+  --shadow: 0 1px 2px rgba(26, 16, 51, .06), 0 8px 24px rgba(26, 16, 51, .08);
+  --page: #ffffff;
 
   /* Teintes des graphiques.
      L'ordre des créneaux n'est pas décoratif : c'est lui qui garantit que deux
@@ -41,36 +49,41 @@
   --grid: #e5e5ea;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --s2: #d97200; --s3: #16a2b9; --grid: #2a2a2c;
-    --ink: #f5f5f7; --ink-2: #a1a1a6; --bg: #000000; --bg-alt: #101012;
-    --hairline: #2a2a2c; --blue: #2997ff; --blue-deep: #2997ff;
-    --tint: rgba(41, 151, 255, .16); --neutral-tint: rgba(245, 245, 247, .10);
-    --green: #30d158; --green-bg: rgba(48, 209, 88, .16);
-    --red: #ff453a; --red-bg: rgba(255, 69, 58, .16);
-    --orange: #ff9f0a; --yellow: #ffd60a;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px rgba(0, 0, 0, .5);
-  }
-}
-:root[data-theme="light"] {
-  --ink: #1d1d1f; --ink-2: #6e6e73; --bg: #ffffff; --bg-alt: #f5f5f7;
-  --hairline: #d2d2d7; --blue: #0071e3; --blue-deep: #0058b0;
-  --tint: rgba(0, 113, 227, .12); --neutral-tint: rgba(29, 29, 31, .08);
-  --green: #248a3d; --green-bg: rgba(52, 199, 89, .14);
-  --red: #d70015; --red-bg: rgba(255, 59, 48, .13);
-  --orange: #ff9500; --yellow: #e5b800;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 24px rgba(0, 0, 0, .06);
-}
+/* Thème sombre « nuit et braise » : le défaut (voir store.js), le choix
+   explicite, ou le choix « Système » sur un appareil réglé en sombre.
+   La braise #ff7a2f fait 7,4:1 sur la nuit ; les boutons pleins y portent un
+   texte nuit (7,1:1) et non blanc, qui tomberait à 2,6:1. Les deux blocs
+   ci-dessous sont identiques : le CSS ne sait pas partager une règle entre
+   un sélecteur et une requête média. */
 :root[data-theme="dark"] {
-  --s2: #d97200; --s3: #16a2b9; --grid: #2a2a2c;
-  --ink: #f5f5f7; --ink-2: #a1a1a6; --bg: #000000; --bg-alt: #101012;
-  --hairline: #2a2a2c; --blue: #2997ff; --blue-deep: #2997ff;
-  --tint: rgba(41, 151, 255, .16); --neutral-tint: rgba(245, 245, 247, .10);
+  --s2: #d97200; --s3: #16a2b9; --grid: #2f2650;
+  --ink: #f7f4ff; --ink-2: #b3aacf; --bg: #0f0a24; --bg-alt: #1d1640;
+  --hairline: #2f2650; --blue: #ff7a2f; --blue-deep: #ff8a3d;
+  --on-accent: #140f2e;
+  --accent-fill: linear-gradient(135deg, #ffb020, #ff5a1f);
+  --tint: rgba(255, 122, 47, .16); --neutral-tint: rgba(247, 244, 255, .10);
   --green: #30d158; --green-bg: rgba(48, 209, 88, .16);
   --red: #ff453a; --red-bg: rgba(255, 69, 58, .16);
   --orange: #ff9f0a; --yellow: #ffd60a;
   --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px rgba(0, 0, 0, .5);
+  --page: radial-gradient(1200px 700px at 50% -10%, rgba(255, 90, 31, .18), transparent 60%),
+          linear-gradient(160deg, #1a1147 0%, #0f0a24 55%, #0b0820 100%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --s2: #d97200; --s3: #16a2b9; --grid: #2f2650;
+    --ink: #f7f4ff; --ink-2: #b3aacf; --bg: #0f0a24; --bg-alt: #1d1640;
+    --hairline: #2f2650; --blue: #ff7a2f; --blue-deep: #ff8a3d;
+    --on-accent: #140f2e;
+    --accent-fill: linear-gradient(135deg, #ffb020, #ff5a1f);
+    --tint: rgba(255, 122, 47, .16); --neutral-tint: rgba(247, 244, 255, .10);
+    --green: #30d158; --green-bg: rgba(48, 209, 88, .16);
+    --red: #ff453a; --red-bg: rgba(255, 69, 58, .16);
+    --orange: #ff9f0a; --yellow: #ffd60a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px rgba(0, 0, 0, .5);
+    --page: radial-gradient(1200px 700px at 50% -10%, rgba(255, 90, 31, .18), transparent 60%),
+            linear-gradient(160deg, #1a1147 0%, #0f0a24 55%, #0b0820 100%);
+}
 }
 
 * { box-sizing: border-box; }
@@ -79,6 +92,8 @@ html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
   background: var(--bg);
+  background: var(--page);
+  background-attachment: fixed;
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 17px;
@@ -133,7 +148,7 @@ button:disabled { opacity: .38; cursor: default; }
   display: block; width: 100%; border: none; border-radius: 12px;
   padding: 13px 16px; font-size: 16px; font-weight: 500; margin-bottom: 10px;
 }
-.btn.primary { background: var(--blue); color: #fff; }
+.btn.primary { background: var(--accent-fill); color: var(--on-accent); }
 :root[data-theme="dark"] .btn.primary { color: #000; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #000; } }
 .btn.secondary { background: var(--bg-alt); color: var(--ink); }
@@ -378,9 +393,8 @@ label.field { display: block; font-size: 13px; color: var(--ink-2); margin-botto
 
 .login { max-width: 380px; margin: 0 auto; padding: 8vh 24px 40px; text-align: center; }
 .login .mark {
-  width: 84px; height: 84px; border-radius: 20px; background: var(--ink); color: var(--bg);
-  margin: 0 auto 18px; display: flex; align-items: center; justify-content: center;
-  font-size: 24px; font-weight: 600; letter-spacing: -.02em;
+  display: block; width: 96px; height: 96px; border-radius: 22px;
+  margin: 0 auto 18px; box-shadow: 0 0 48px rgba(255, 90, 31, .45);
 }
 .login h1 { font-size: 34px; margin-bottom: 6px; }
 .login .tagline { color: var(--ink-2); font-size: 17px; margin: 0 0 40px; }

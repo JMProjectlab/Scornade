@@ -92,7 +92,7 @@ function openRoundEditor(session, index) {
 
 function screenLogin() {
   return `<div class="login">
-    <div class="mark">Sc</div>
+    <img class="mark" src="assets/img/apple-touch-icon.png" alt="">
     <h1>Scornade</h1>
     <p class="tagline">Comptez. Gagnez. Recommencez.</p>
     <button class="btn" style="background:var(--ink);color:var(--bg)" data-act="sign-apple">

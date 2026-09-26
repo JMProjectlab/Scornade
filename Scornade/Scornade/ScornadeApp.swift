@@ -32,6 +32,8 @@ struct ScornadeApp: App {
             .modifier(ReviewPrompt())
             .environmentObject(store)
             .tint(Color.brand)
+            // Le thème nuit et braise de l'icône vaut pour toute l'app.
+            .preferredColorScheme(.dark)
             .environment(\.locale, localeOverride ?? Locale.autoupdatingCurrent)
             .onOpenURL { url in
                 // Retour de la feuille de connexion Google.

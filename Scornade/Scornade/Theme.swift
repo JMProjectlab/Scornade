@@ -3,9 +3,11 @@ import UIKit
 
 // MARK: - Couleurs
 //
-// Palette reprise de la charte graphique JMprojectlab : deux neutres (encre,
-// gris nuage) portent presque toute l'interface, et le bleu est le seul accent,
-// réservé à ce qui est actionnable ou sélectionné — jamais décoratif.
+// Thème « nuit et braise », repris de l'icône : un fond nuit-violet, des
+// surfaces violettes à peine plus claires, et l'orange braise comme seul
+// accent, réservé à ce qui est actionnable ou sélectionné — jamais décoratif.
+// L'app s'affiche toujours en sombre (voir ScornadeApp) ; les valeurs claires
+// restent définies pour les aperçus Xcode et un éventuel retour du mode clair.
 
 extension Color {
     init(hex: String) {
@@ -24,18 +26,25 @@ extension Color {
         self.init(UIColor { $0.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light) })
     }
 
-    // Neutres de la charte.
-    static let ink = Color(light: Color(hex: "1D1D1F"), dark: Color(hex: "F5F5F7"))
-    static let inkSecondary = Color(light: Color(hex: "6E6E73"), dark: Color(hex: "A1A1A6"))
-    static let cloud = Color(light: Color(hex: "F5F5F7"), dark: Color(hex: "101012"))
-    static let hairline = Color(light: Color(hex: "D2D2D7"), dark: Color(hex: "2A2A2C"))
+    // Neutres du thème.
+    static let ink = Color(light: Color(hex: "1A1033"), dark: Color(hex: "F7F4FF"))
+    static let inkSecondary = Color(light: Color(hex: "6B6485"), dark: Color(hex: "B3AACF"))
+    /// Fond d'écran : la nuit de l'icône.
+    static let night = Color(light: Color(hex: "FFFFFF"), dark: Color(hex: "0F0A24"))
+    /// Surface des cartes et des champs, posée sur `night`.
+    static let cloud = Color(light: Color(hex: "F5F2FC"), dark: Color(hex: "1D1640"))
+    /// Surface un cran au-dessus de `cloud` (champ dans une carte).
+    static let cloudRaised = Color(light: Color(hex: "FFFFFF"), dark: Color(hex: "2A2152"))
+    static let hairline = Color(light: Color(hex: "E2DCF0"), dark: Color(hex: "2F2650"))
 
-    // Le bleu : seul accent de la charte.
-    static let brand = Color(light: Color(hex: "0071E3"), dark: Color(hex: "2997FF"))
-    /// Fond teinté d'un élément sélectionné ou actif (le bleu, très dilué).
-    static let brandLight = Color.brand.opacity(0.12)
+    // L'accent : violet en clair, braise en sombre. En sombre, le texte blanc
+    // des boutons pleins y garde un contraste de 3,3:1, suffisant pour leur
+    // libellé en gras de 17 pt (seuil « grand texte » du WCAG).
+    static let brand = Color(light: Color(hex: "6D28D9"), dark: Color(hex: "F2600C"))
+    /// Fond teinté d'un élément sélectionné ou actif (l'accent, très dilué).
+    static let brandLight = Color.brand.opacity(0.16)
     /// Texte posé sur `brandLight`.
-    static let brandDark = Color(light: Color(hex: "0058B0"), dark: Color(hex: "2997FF"))
+    static let brandDark = Color(light: Color(hex: "5B21B6"), dark: Color(hex: "FF8A3D"))
 
     // Retours sémantiques (contrat réussi / chuté, bust, saisie invalide).
     // La charte ne définit ni vert ni rouge : on s'appuie sur les couleurs
@@ -79,6 +88,13 @@ extension Font {
 }
 
 extension View {
+    /// Fond « nuit » sous tout l'écran, y compris derrière une liste ou un
+    /// formulaire, dont le fond système gris est masqué.
+    func nightBackground() -> some View {
+        scrollContentBackground(.hidden)
+            .background(Color.night.ignoresSafeArea())
+    }
+
     /// Chasse serrée des titres de la charte (−0,02 em).
     func jmTightTracking(_ size: CGFloat) -> some View {
         tracking(size * -0.02)
