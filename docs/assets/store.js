@@ -33,6 +33,8 @@ export const state = {
   user: null,
   /** Données sans compte proposées à l'import après une connexion. */
   pendingImport: null,
+  /** Code joueur reçu par lien (QR scanné avec l'appareil photo). */
+  pendingInvite: null,
   filter: "all",
   /** Renseigné par firebase.js quand la synchronisation est active. */
   sync: null,
@@ -200,13 +202,60 @@ export async function deleteEverything() {
 
 // --- Joueurs --------------------------------------------------------------
 
-export function addPlayer(name, email = null) {
+export function addPlayer(name, email = null, linkedUid = null) {
   const used = new Set(state.players.map((p) => p.colorIndex));
   let free = 0;
   while (free < HUES.length && used.has(free)) free++;
   if (free >= HUES.length) free = state.players.length % HUES.length;
-  state.players.push({ id: uid(), name, colorIndex: free, email });
+  const player = { id: uid(), name, colorIndex: free, email };
+  if (linkedUid) player.linkedUid = linkedUid;
+  state.players.push(player);
   commit();
+  return player;
+}
+
+// --- Code joueur ----------------------------------------------------------
+//
+// Le QR code « Mon code joueur » porte un lien vers ce site :
+//   https://jmprojectlab.fr/Scornade/?rejoindre=<uid>&n=<nom>&e=<e-mail>
+// Scanné depuis l'app, il ajoute le joueur. Scanné avec l'appareil photo, il
+// ouvre ce site, qui propose d'ajouter le joueur, et l'App Store à qui n'a pas
+// l'app. Même format que PlayerInvite côté iOS.
+
+export const INVITE_BASE = "https://jmprojectlab.fr/Scornade/";
+
+export function inviteURL(user) {
+  const q = new URLSearchParams({ rejoindre: user.id, n: user.name });
+  if (user.email) q.set("e", user.email);
+  return `${INVITE_BASE}?${q}`;
+}
+
+/** Lit une invitation dans les paramètres d'une adresse ; null sinon. */
+export function parseInvite(search) {
+  const q = new URLSearchParams(search);
+  const uidParam = q.get("rejoindre");
+  const name = q.get("n");
+  if (!uidParam || !name) return null;
+  return { uid: uidParam, name, email: q.get("e") || null };
+}
+
+/** Fiche déjà reliée à ce compte, sinon même e-mail, sinon même nom. */
+export function bestMatch(invite) {
+  const free = state.players.filter((p) => !p.linkedUid);
+  return state.players.find((p) => p.linkedUid === invite.uid)
+    || (invite.email && free.find((p) => p.email?.toLowerCase() === invite.email.toLowerCase()))
+    || free.find((p) => p.name.localeCompare(invite.name, "fr", { sensitivity: "base" }) === 0)
+    || null;
+}
+
+/** Relie la fiche `existingId` au compte invité, ou crée une fiche reliée. */
+export function linkInvite(invite, existingId = null) {
+  const existing = existingId && playerById(existingId);
+  if (!existing) return addPlayer(invite.name, invite.email, invite.uid);
+  existing.linkedUid = invite.uid;
+  if (!existing.email && invite.email) existing.email = invite.email;
+  commit();
+  return existing;
 }
 
 export function removePlayer(id) {
@@ -231,6 +280,7 @@ export function fusePlayers(duplicateId, keptId) {
     if (e.name === dup.name) e.name = kept.name;
   }));
   if (!kept.email && dup.email) kept.email = dup.email;
+  if (!kept.linkedUid && dup.linkedUid) kept.linkedUid = dup.linkedUid;
   state.players = state.players.filter((p) => p.id !== dup.id);
   commit();
 }

@@ -4,6 +4,7 @@
 // assez rapide à cette échelle, et ça évite d'avoir à synchroniser à la main
 // une douzaine de fragments de vue.
 
+import qrcode from "./vendor/qrcode.mjs";
 import { GAMES, CATEGORIES, gameById, HUES, glyph } from "./data.js";
 import * as C from "./charts.js";
 import * as E from "./engine.js";
@@ -90,8 +91,18 @@ function openRoundEditor(session, index) {
 
 // --- écrans ---------------------------------------------------------------
 
+/** Invitation reçue par lien, présentée à qui n'est pas connecté. */
+function inviteIntro() {
+  const inv = S.state.pendingInvite;
+  if (!inv) return "";
+  return `<div class="card" style="text-align:left;margin-bottom:22px">
+    <p style="margin:0 0 10px"><strong>${esc(inv.name)} vous invite sur Scornade.</strong><br>
+    <span class="hint">Connectez-vous pour l'ajouter à vos joueurs. Sur iPhone, l'application fait la même chose.</span></p>
+    <a class="btn primary" style="text-align:center;margin-bottom:0" href="https://apps.apple.com/fr/app/id6802812197">Télécharger l'app iPhone</a></div>`;
+}
+
 function screenLogin() {
-  return `<div class="login">
+  return `<div class="login">${inviteIntro()}
     <img class="mark" src="assets/img/apple-touch-icon.png" alt="">
     <h1>Scornade</h1>
     <p class="tagline">Comptez. Gagnez. Recommencez.</p>
@@ -110,6 +121,19 @@ function screenHome() {
   const games = S.state.filter === "all" ? GAMES : GAMES.filter((g) => g.cat === S.state.filter);
 
   let html = "";
+  // Son propre code, ouvert une fois connecté : rien à ajouter.
+  if (S.state.pendingInvite?.uid === S.state.user?.id) S.state.pendingInvite = null;
+  const inv = S.state.pendingInvite;
+  if (inv) {
+    const match = S.bestMatch(inv);
+    html += `<div class="card" role="region" aria-label="Invitation">
+      <p style="margin:0 0 12px"><strong>Ajouter ${esc(inv.name)} à vos joueurs ?</strong><br>
+      <span class="hint">${inv.email ? esc(inv.email) + " · " : ""}${match
+        ? `Sa fiche « ${esc(match.name)} » sera reliée à son compte.`
+        : "Une fiche reliée à son compte sera créée."}</span></p>
+      <button class="btn primary" data-act="accept-invite" data-id="${match?.id ?? ""}">Ajouter</button>
+      <button class="btn secondary" data-act="dismiss-invite" style="margin-bottom:0">Ignorer</button></div>`;
+  }
   const found = S.state.pendingImport;
   if (found) {
     html += `<div class="card" role="region" aria-label="Import">
@@ -675,9 +699,21 @@ function screenPlayers() {
       <input type="text" id="new-player" placeholder="Nom du joueur" aria-label="Nom du joueur">
       <button class="ghost" data-act="add-player">Ajouter</button></div></div>`;
 
+  if (S.state.user) {
+    // Mon code joueur : les autres m'ajoutent en le scannant.
+    const url = S.inviteURL(S.state.user);
+    const qr = qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    html += `<div class="section-label">Mon code joueur</div><div class="card" style="text-align:center">
+      <div class="qr" aria-label="QR code de ${esc(S.state.user.name)}" role="img">${qr.createSvgTag({ cellSize: 6, margin: 4, scalable: true })}</div>
+      <p class="hint">Faites-le scanner par un autre joueur : vous apparaîtrez dans ses joueurs. S'il n'a pas Scornade, le code l'y emmène.</p>
+      <button class="btn secondary" data-act="share-code" data-url="${esc(url)}" style="margin-bottom:0">Envoyer le lien</button></div>`;
+  }
+
   html += `<div class="card">` + (S.state.players.map((p) =>
     `<div class="row">${avatar(p.name, p.colorIndex)}
-      <span class="name">${esc(p.name)}</span>
+      <span class="name">${esc(p.name)}${p.linkedUid ? ` <span class="linked" title="Relié à son compte" aria-label="relié à son compte">🔗</span>` : ""}</span>
       <button class="icon-btn" data-act="del-player" data-id="${p.id}"
         aria-label="Supprimer ${esc(p.name)}">Supprimer</button></div>`).join("")
     || `<p class="hint" style="margin:0">Aucun joueur pour l'instant.</p>`) + `</div>`;
@@ -1189,6 +1225,25 @@ export function bindEvents() {
         S.fusePlayers(dup, kept);
         toast("Fiches fusionnées.");
         render();
+        break;
+      }
+      case "accept-invite": {
+        const inv = S.state.pendingInvite;
+        S.state.pendingInvite = null;
+        sessionStorage.removeItem("sm.invite");
+        if (inv) { S.linkInvite(inv, el.dataset.id || null); toast(`${inv.name} ajouté à vos joueurs.`); }
+        render();
+        break;
+      }
+      case "dismiss-invite":
+        S.state.pendingInvite = null;
+        sessionStorage.removeItem("sm.invite");
+        render();
+        break;
+      case "share-code": {
+        const url = el.dataset.url;
+        if (navigator.share) navigator.share({ title: "Mon code joueur Scornade", url }).catch(() => {});
+        else navigator.clipboard?.writeText(url).then(() => toast("Lien copié."));
         break;
       }
       case "import-guest": S.resolveGuestImport(true); render(); break;
