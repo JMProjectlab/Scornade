@@ -179,9 +179,12 @@ function screenNewGame() {
       </div></div>`;
   }
 
-  html += `<button class="btn primary" data-act="start" ${canStart ? "" : "disabled"}>Lancer la partie</button>
-    <p class="hint" style="text-align:center">${g.team
+  html += `<button class="btn primary" data-act="start" ${canStart ? "" : "disabled"}>Lancer la partie</button>`;
+  // La consigne n'explique que le bouton désactivé : elle part avec lui.
+  if (!canStart) {
+    html += `<p class="hint" style="text-align:center">${g.team
       ? "Il faut au moins un joueur par équipe." : "Il faut au moins deux joueurs."}</p>`;
+  }
   return html;
 }
 

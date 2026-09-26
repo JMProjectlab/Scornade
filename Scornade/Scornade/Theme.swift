@@ -28,14 +28,14 @@ extension Color {
 
     // Neutres du thème.
     static let ink = Color(light: Color(hex: "1A1033"), dark: Color(hex: "F7F4FF"))
-    static let inkSecondary = Color(light: Color(hex: "6B6485"), dark: Color(hex: "B3AACF"))
+    static let inkSecondary = Color(light: Color(hex: "6B6485"), dark: Color(hex: "D4CDEF"))
     /// Fond d'écran : la nuit de l'icône.
     static let night = Color(light: Color(hex: "FFFFFF"), dark: Color(hex: "0F0A24"))
     /// Surface des cartes et des champs, posée sur `night`.
-    static let cloud = Color(light: Color(hex: "F5F2FC"), dark: Color(hex: "1D1640"))
+    static let cloud = Color(light: Color(hex: "F5F2FC"), dark: Color(hex: "2A2060"))
     /// Surface un cran au-dessus de `cloud` (champ dans une carte).
-    static let cloudRaised = Color(light: Color(hex: "FFFFFF"), dark: Color(hex: "2A2152"))
-    static let hairline = Color(light: Color(hex: "E2DCF0"), dark: Color(hex: "2F2650"))
+    static let cloudRaised = Color(light: Color(hex: "FFFFFF"), dark: Color(hex: "3A2E7A"))
+    static let hairline = Color(light: Color(hex: "E2DCF0"), dark: Color(hex: "5B4F99"))
 
     // L'accent : violet en clair, braise en sombre. En sombre, le texte blanc
     // des boutons pleins y garde un contraste de 3,3:1, suffisant pour leur

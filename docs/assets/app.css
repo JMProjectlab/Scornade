@@ -56,9 +56,9 @@
    ci-dessous sont identiques : le CSS ne sait pas partager une règle entre
    un sélecteur et une requête média. */
 :root[data-theme="dark"] {
-  --s2: #d97200; --s3: #16a2b9; --grid: #2f2650;
-  --ink: #f7f4ff; --ink-2: #b3aacf; --bg: #0f0a24; --bg-alt: #1d1640;
-  --hairline: #2f2650; --blue: #ff7a2f; --blue-deep: #ff8a3d;
+  --s2: #d97200; --s3: #16a2b9; --grid: #3d3275;
+  --ink: #f7f4ff; --ink-2: #d4cdef; --bg: #0f0a24; --bg-alt: #2a2060;
+  --hairline: #5b4f99; --blue: #ff7a2f; --blue-deep: #ff8a3d;
   --on-accent: #140f2e;
   --accent-fill: linear-gradient(135deg, #ffb020, #ff5a1f);
   --tint: rgba(255, 122, 47, .16); --neutral-tint: rgba(247, 244, 255, .10);
@@ -71,9 +71,9 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --s2: #d97200; --s3: #16a2b9; --grid: #2f2650;
-    --ink: #f7f4ff; --ink-2: #b3aacf; --bg: #0f0a24; --bg-alt: #1d1640;
-    --hairline: #2f2650; --blue: #ff7a2f; --blue-deep: #ff8a3d;
+    --s2: #d97200; --s3: #16a2b9; --grid: #3d3275;
+    --ink: #f7f4ff; --ink-2: #d4cdef; --bg: #0f0a24; --bg-alt: #2a2060;
+    --hairline: #5b4f99; --blue: #ff7a2f; --blue-deep: #ff8a3d;
     --on-accent: #140f2e;
     --accent-fill: linear-gradient(135deg, #ffb020, #ff5a1f);
     --tint: rgba(255, 122, 47, .16); --neutral-tint: rgba(247, 244, 255, .10);
@@ -142,7 +142,14 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -.02em; line-height: 1
 /* ---------- boutons et contrôles ---------- */
 
 button { font: inherit; letter-spacing: -.012em; cursor: pointer; }
-button:disabled { opacity: .38; cursor: default; }
+button:disabled { opacity: .45; cursor: default; }
+/* Un bouton plein désactivé reste lisible : pas de transparence, mais une
+   surface neutre bordée et un libellé secondaire. Le dégradé braise est
+   réservé à l'action disponible. */
+.btn.primary:disabled {
+  opacity: 1; background: var(--bg-alt); color: var(--ink-2);
+  box-shadow: inset 0 0 0 1.5px var(--hairline);
+}
 
 .btn {
   display: block; width: 100%; border: none; border-radius: 12px;
@@ -169,9 +176,10 @@ button:disabled { opacity: .38; cursor: default; }
 .pillbar::-webkit-scrollbar { display: none; }
 .pill {
   border: none; border-radius: 999px; padding: 7px 15px; font-size: 14px;
-  background: var(--bg-alt); color: var(--ink-2); white-space: nowrap;
+  background: var(--bg-alt); color: var(--ink); white-space: nowrap;
+  box-shadow: inset 0 0 0 1px var(--hairline);
 }
-.pill[aria-pressed="true"] { background: var(--tint); color: var(--blue-deep); }
+.pill[aria-pressed="true"] { background: var(--tint); color: var(--blue-deep); box-shadow: inset 0 0 0 1.5px var(--blue); }
 
 /* Les pastilles vivent presque toujours dans une .card, qui a déjà le fond
    --bg-alt : sans contraste propre elles disparaîtraient dans la carte. */
@@ -196,7 +204,7 @@ label.field { display: block; font-size: 13px; color: var(--ink-2); margin-botto
 
 /* ---------- blocs ---------- */
 
-.card { background: var(--bg-alt); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+.card { background: var(--bg-alt); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
 .section-label {
   font-size: 12px; font-weight: 500; color: var(--ink-2);
   margin: 22px 0 10px; letter-spacing: .02em; text-transform: uppercase;
@@ -206,7 +214,7 @@ label.field { display: block; font-size: 13px; color: var(--ink-2); margin-botto
 
 .grid-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .gcard {
-  background: var(--bg-alt); border: none; border-radius: var(--radius);
+  background: var(--bg-alt); border: 1px solid var(--hairline); border-radius: var(--radius);
   padding: 14px; text-align: left; color: var(--ink); display: block; width: 100%;
   transition: transform .12s ease, background .12s ease;
 }
