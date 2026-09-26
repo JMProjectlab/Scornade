@@ -30,6 +30,14 @@
   --shadow: 0 1px 2px rgba(26, 16, 51, .06), 0 8px 24px rgba(26, 16, 51, .08);
   --page: #ffffff;
 
+  /* Polices : les mêmes que le portfolio JMprojectlab. SF Pro, déjà
+     installée, sur les appareils Apple ; Segoe UI sur Windows, Roboto sur
+     Android. SF Pro ne peut pas être embarquée sur le web (licence Apple) :
+     on l'appelle, on ne la télécharge pas. Helvetica en dernier recours. */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+          "Segoe UI", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
   /* Teintes des graphiques.
      L'ordre des créneaux n'est pas décoratif : c'est lui qui garantit que deux
      parts voisines restent distinguables, y compris en vision daltonienne. Il a
@@ -95,14 +103,14 @@ body {
   background: var(--page);
   background-attachment: fixed;
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font);
   font-size: 17px;
   line-height: 1.47;
   letter-spacing: -.012em;
   -webkit-font-smoothing: antialiased;
 }
 .tab { font-variant-numeric: tabular-nums; }
-.mono { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap;
@@ -297,7 +305,7 @@ label.field { display: block; font-size: 13px; color: var(--ink-2); margin-botto
 .note.tie { color: var(--blue-deep); }
 
 .hist { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 9px 0; border-top: 1px solid var(--hairline); }
-.hist .ix { color: var(--ink-2); width: 32px; flex-shrink: 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.hist .ix { color: var(--ink-2); width: 32px; flex-shrink: 0; font-family: var(--mono); }
 .hist .dt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hist .st { font-weight: 600; font-size: 12px; }
 .hist .st.ok { color: var(--green); }
@@ -338,7 +346,7 @@ label.field { display: block; font-size: 13px; color: var(--ink-2); margin-botto
    un « 121 » trop aéré. Les colonnes alignées, elles, gardent `.tab`. */
 .statgrid .v { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
 .statgrid .k { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
-.ratio { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ratio { font-family: var(--mono); font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
 /* Les filtres tiennent sur une seule ligne, au-dessus de tout ce qu'ils
    cadrent — jamais dans une carte de graphique, jamais un par graphique. */
