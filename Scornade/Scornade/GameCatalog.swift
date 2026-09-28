@@ -6,7 +6,7 @@ enum GameCatalog {
     private static let bundled: [Game] = [
         Game(id: "belote", name: "Belote", category: "cartes", symbol: "suit.club.fill",
              engine: .contractPoints, isTeamGame: true, defaultTarget: 501, higherWins: true,
-             rules: "Jeu de plis à quatre, en deux équipes, avec 32 cartes et un atout choisi à chaque donne.\n\nÀ l'atout, l'ordre change : Valet 20 points, 9 14, As 11, 10 10, Roi 4, Dame 3, le 8 et le 7 rien. Dans les autres couleurs : As 11, 10 10, Roi 4, Dame 3, Valet 2, le reste rien. Les cartes totalisent 152 points, plus 10 pour le dernier pli — le dix de der — soit 162 points par donne.\n\nLe camp qui prend s'engage à faire au moins 82 points, c'est-à-dire plus de la moitié. S'il y parvient, chaque camp marque ce qu'il a ramassé. Sinon il est dedans, et les 162 points vont entièrement à la défense.\n\nLa belote-rebelote — Roi et Dame d'atout dans la même main — rapporte 20 points à son camp, qui les conserve même contrat manqué. Le capot, tous les plis pour un seul camp, vaut 252 points.\n\nPremier camp à l'objectif gagne."),
+             rules: "Jeu de plis à quatre, en deux équipes, avec 32 cartes et un atout choisi à chaque donne.\n\nÀ l'atout, l'ordre change : Valet 20 points, 9 14, As 11, 10 10, Roi 4, Dame 3, le 8 et le 7 rien. Dans les autres couleurs : As 11, 10 10, Roi 4, Dame 3, Valet 2, le reste rien. Les cartes totalisent 152 points, plus 10 pour le dernier pli — le dix de der — soit 162 points par donne.\n\nLe camp qui prend s'engage à faire au moins 82 points, c'est-à-dire plus de la moitié. S'il y parvient, chaque camp marque ce qu'il a ramassé. Sinon il est dedans, et les 162 points vont entièrement à la défense.\n\nÀ 81 partout, il y a litige : le preneur ne marque rien et ses 81 points sont remis en jeu, tandis que la défense encaisse les siens. Les points remis en jeu reviennent au camp qui remporte la donne suivante — deux litiges de suite en mettent donc 162 en jeu.\n\nLa belote-rebelote — Roi et Dame d'atout dans la même main — rapporte 20 points à son camp, qui les conserve même contrat manqué. Le capot, tous les plis pour un seul camp, vaut 252 points.\n\nPremier camp à l'objectif gagne."),
         Game(id: "coinche", name: "Coinche", category: "cartes", symbol: "suit.spade.fill",
              engine: .contractPoints, isTeamGame: true, defaultTarget: 1000, higherWins: true,
              rules: "La belote, mais l'atout et l'engagement se décident aux enchères. On annonce un nombre de points de 80 à 160, de dix en dix, dans une couleur — ou un capot, voire une générale.\n\nLes 162 points de la donne se comptent comme à la belote : 152 aux cartes, 10 pour le dix de der, et 20 de plus pour la belote-rebelote. Le camp qui prend doit atteindre le contrat annoncé, sans quoi il perd tout et la défense encaisse.\n\nL'adversaire qui juge le contrat intenable peut coincher : l'enjeu double. Le camp coinché peut alors surcoincher, et l'enjeu quadruple.\n\nPremier camp à l'objectif gagne."),
@@ -96,63 +96,141 @@ enum GameCatalog {
 
     static func setCustom(_ games: [Game]) { custom = games }
 
-    // MARK: Corrections venues de Firestore
+    // MARK: Catalogue venu de Firestore
 
-    /// Le catalogue livré, corrigé par ce que dit la collection `games` de
-    /// Firestore.
-    private static var corrected: [Game] = bundled
+    /// Le catalogue commun : celui embarqué, corrigé et complété par ce que dit
+    /// la collection `games` de Firestore.
+    private(set) static var shared: [Game] = bundled
 
-    /// Le catalogue effectif : les jeux livrés, puis ceux de l'utilisateur.
-    static var all: [Game] { corrected + custom }
+    /// Le catalogue effectif : le catalogue commun, puis les jeux de
+    /// l'utilisateur.
+    static var all: [Game] { shared + custom }
 
     private static let cacheKey = "sm.catalog"
 
-    /// Ce qu'un document Firestore peut redéfinir sur un jeu.
+    /// Un document `games/{id}` de Firestore.
     ///
-    /// Uniquement de la présentation. Le moteur reste dans le code — il désigne
-    /// une vue de saisie et une fonction de calcul — et le sens de victoire
-    /// aussi : le changer à distance réécrirait le vainqueur de parties déjà
-    /// terminées, puisque `winnerIndex` se recalcule à chaque affichage.
-    struct Override: Codable {
+    /// Il fait l'une de deux choses selon son identifiant. Si celui-ci désigne
+    /// un jeu livré, il en corrige la présentation. S'il est inconnu, il définit
+    /// un jeu de plus — et il lui faut alors au minimum un nom et un moteur.
+    struct Entry: Codable {
+        // Corrections, valables dans les deux cas.
         var name: String?
         var rules: String?
         var category: String?
         var defaultTarget: Int?
+        // Le reste ne sert qu'à définir un jeu absent du catalogue livré :
+        // sur un jeu livré, ces champs sont ignorés (voir `apply`).
+        var engine: String?
+        var isTeamGame: Bool?
+        var higherWins: Bool?
+        var roundLimit: Int?
+        var symbol: String?
     }
 
-    /// Applique des corrections et dit si quelque chose a bougé.
+    /// Les seuls moteurs qu'un document peut désigner, et leur nom dans le
+    /// document.
     ///
-    /// Un identifiant inconnu est ignoré : ajouter un jeu à distance
-    /// supposerait de lui fournir un moteur, et un moteur est du code.
+    /// Trois moteurs génériques : ceux qui se contentent d'un nombre par manche
+    /// et que l'écran de score générique sait déjà afficher. Les autres — belote,
+    /// tarot, yam's, phase 10… — supposent une vue de saisie dédiée, donc du
+    /// code, donc une publication. Le vocabulaire est volontairement neutre : le
+    /// même document est lu par l'app et par le site, qui ne nomment pas leurs
+    /// moteurs pareil.
+    private static let remoteEngines: [String: ScoringEngine] = [
+        "points": .cumulativePoints,     // un total par manche
+        "countdown": .countdown,         // on retranche jusqu'à zéro
+        "rounds": .mancheWinner,         // on compte les manches gagnées
+    ]
+
+    /// Reconstruit le catalogue depuis celui livré et dit s'il a changé.
+    ///
+    /// Sur un jeu livré, seule la présentation est corrigée : le moteur, le mode
+    /// équipe et le sens de victoire restent ceux du code. Le moteur désigne une
+    /// vue de saisie et une fonction de calcul, et le vainqueur est recalculé à
+    /// chaque affichage — les changer à distance réécrirait le résultat de
+    /// parties déjà terminées.
     @discardableResult
-    static func apply(_ overrides: [String: Override]) -> Bool {
-        guard !overrides.isEmpty else { return false }
+    static func apply(_ entries: [String: Entry]) -> Bool {
         var next = bundled
-        var changed = false
         for i in next.indices {
-            guard let o = overrides[next[i].id] else { continue }
-            if let v = o.name, !v.isEmpty, v != next[i].name { next[i].name = v; changed = true }
-            if let v = o.rules, !v.isEmpty, v != next[i].rules { next[i].rules = v; changed = true }
-            if let v = o.category, !v.isEmpty, v != next[i].category { next[i].category = v; changed = true }
-            if let v = o.defaultTarget, v >= 0, v != next[i].defaultTarget {
-                next[i].defaultTarget = v; changed = true
-            }
+            guard let e = entries[next[i].id] else { continue }
+            if let v = e.name, !v.isEmpty { next[i].name = v }
+            if let v = e.rules, !v.isEmpty { next[i].rules = v }
+            if let v = e.category, isKnownCategory(v) { next[i].category = v }
+            if let v = e.defaultTarget, v >= 0 { next[i].defaultTarget = v }
         }
-        if changed { corrected = next }
-        return changed
+
+        let bundledIds = Set(bundled.map(\.id))
+        let added = entries
+            .filter { !bundledIds.contains($0.key) }
+            .compactMap { addedGame(id: $0.key, from: $0.value) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        next.append(contentsOf: added)
+
+        // Comparer le catalogue commun entier, plutôt que de suivre chaque
+        // champ : c'est ce qui fait qu'un document supprimé dans la console rend
+        // bien au jeu sa valeur livrée, et qu'un jeu ajouté puis retiré
+        // disparaît. Les jeux personnalisés ne sont pas dans la comparaison :
+        // ils ne viennent pas de Firestore et ne bougent pas d'ici.
+        guard next != shared else { return false }
+        shared = next
+        return true
     }
 
-    /// Relit les corrections mises en cache, pour les avoir dès le premier
-    /// écran et même sans réseau.
+    /// Construit un jeu à partir d'un document dont l'identifiant est inconnu.
+    ///
+    /// Rend `nil` dès que le document ne décrit pas un jeu jouable — sans nom,
+    /// sans moteur reconnu, ou avec un identifiant qui n'est pas un slug. Une
+    /// faute de frappe dans la console ne peut donc pas ajouter un jeu cassé :
+    /// au pire, il n'apparaît pas.
+    private static func addedGame(id: String, from e: Entry) -> Game? {
+        guard isValidId(id),
+              let name = e.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty,
+              let engine = e.engine.flatMap({ remoteEngines[$0] })
+        else { return nil }
+
+        return Game(
+            id: id,
+            name: name,
+            category: e.category.flatMap { isKnownCategory($0) ? $0 : nil } ?? "societe",
+            // Le symbole est vérifié à l'affichage : un nom inconnu retombe sur
+            // le pictogramme par défaut plutôt que de laisser une case vide.
+            symbol: e.symbol ?? "dice",
+            engine: engine,
+            isTeamGame: e.isTeamGame ?? false,
+            defaultTarget: max(0, e.defaultTarget ?? 0),
+            higherWins: e.higherWins ?? true,
+            roundLimit: max(0, e.roundLimit ?? 0),
+            rules: e.rules ?? ""
+        )
+    }
+
+    /// Une catégorie inconnue rendrait le jeu introuvable sous chaque onglet
+    /// sauf « Tous ». Mieux vaut ignorer la valeur que masquer le jeu.
+    private static func isKnownCategory(_ key: String) -> Bool {
+        key != "all" && categories.contains { $0.key == key }
+    }
+
+    /// L'identifiant se retrouve dans chaque partie enregistrée et sert de clé
+    /// au pictogramme : on le veut aussi sobre que ceux du catalogue livré.
+    private static func isValidId(_ id: String) -> Bool {
+        !id.isEmpty && id.count <= 40
+            && id.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "-") }
+    }
+
+    /// Relit le catalogue mis en cache, pour l'avoir dès le premier écran et
+    /// même sans réseau.
     static func loadCached() {
         guard let data = UserDefaults.standard.data(forKey: cacheKey),
-              let decoded = try? JSONDecoder().decode([String: Override].self, from: data)
+              let decoded = try? JSONDecoder().decode([String: Entry].self, from: data)
         else { return }
         apply(decoded)
     }
 
-    static func cache(_ overrides: [String: Override]) {
-        guard let data = try? JSONEncoder().encode(overrides) else { return }
+    static func cache(_ entries: [String: Entry]) {
+        guard let data = try? JSONEncoder().encode(entries) else { return }
         UserDefaults.standard.set(data, forKey: cacheKey)
     }
 }

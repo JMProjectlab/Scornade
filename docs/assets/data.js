@@ -4,7 +4,7 @@
 
 export const GAMES = [
   { id: "belote", name: "Belote", cat: "cartes", engine: "belote", team: true, target: 501, high: true,
-    rules: "Jeu de plis à quatre, en deux équipes, avec 32 cartes et un atout choisi à chaque donne.\n\nÀ l'atout, l'ordre change : Valet 20 points, 9 14, As 11, 10 10, Roi 4, Dame 3, le 8 et le 7 rien. Dans les autres couleurs : As 11, 10 10, Roi 4, Dame 3, Valet 2, le reste rien. Les cartes totalisent 152 points, plus 10 pour le dernier pli — le dix de der — soit 162 points par donne.\n\nLe camp qui prend s'engage à faire au moins 82 points, c'est-à-dire plus de la moitié. S'il y parvient, chaque camp marque ce qu'il a ramassé. Sinon il est dedans, et les 162 points vont entièrement à la défense.\n\nLa belote-rebelote — Roi et Dame d'atout dans la même main — rapporte 20 points à son camp, qui les conserve même contrat manqué. Le capot, tous les plis pour un seul camp, vaut 252 points.\n\nPremier camp à l'objectif gagne." },
+    rules: "Jeu de plis à quatre, en deux équipes, avec 32 cartes et un atout choisi à chaque donne.\n\nÀ l'atout, l'ordre change : Valet 20 points, 9 14, As 11, 10 10, Roi 4, Dame 3, le 8 et le 7 rien. Dans les autres couleurs : As 11, 10 10, Roi 4, Dame 3, Valet 2, le reste rien. Les cartes totalisent 152 points, plus 10 pour le dernier pli — le dix de der — soit 162 points par donne.\n\nLe camp qui prend s'engage à faire au moins 82 points, c'est-à-dire plus de la moitié. S'il y parvient, chaque camp marque ce qu'il a ramassé. Sinon il est dedans, et les 162 points vont entièrement à la défense.\n\nÀ 81 partout, il y a litige : le preneur ne marque rien et ses 81 points sont remis en jeu, tandis que la défense encaisse les siens. Les points remis en jeu reviennent au camp qui remporte la donne suivante — deux litiges de suite en mettent donc 162 en jeu.\n\nLa belote-rebelote — Roi et Dame d'atout dans la même main — rapporte 20 points à son camp, qui les conserve même contrat manqué. Le capot, tous les plis pour un seul camp, vaut 252 points.\n\nPremier camp à l'objectif gagne." },
   { id: "coinche", name: "Coinche", cat: "cartes", engine: "cumul", team: true, target: 1000, high: true,
     rules: "La belote, mais l'atout et l'engagement se décident aux enchères. On annonce un nombre de points de 80 à 160, de dix en dix, dans une couleur — ou un capot, voire une générale.\n\nLes 162 points de la donne se comptent comme à la belote : 152 aux cartes, 10 pour le dix de der, et 20 de plus pour la belote-rebelote. Le camp qui prend doit atteindre le contrat annoncé, sans quoi il perd tout et la défense encaisse.\n\nL'adversaire qui juge le contrat intenable peut coincher : l'enjeu double. Le camp coinché peut alors surcoincher, et l'enjeu quadruple.\n\nPremier camp à l'objectif gagne." },
   { id: "tarot", name: "Tarot", cat: "cartes", engine: "cumul", team: false, target: 500, high: true,
@@ -62,16 +62,16 @@ export const CATEGORIES = [
 
 export const gameById = (id) => GAMES.find((g) => g.id === id);
 
-// --- Corrections venues de Firestore --------------------------------------
+// --- Catalogue venu de Firestore ------------------------------------------
 //
-// La collection `games` peut redéfinir certains champs d'un jeu, jeu par jeu.
-// C'est ce qui permet de corriger une faute dans une règle sans republier
-// l'application sur l'App Store.
+// La collection `games` fait deux choses selon l'identifiant du document. Sur
+// un jeu livré, elle en corrige la présentation — c'est ce qui permet de
+// réparer une faute dans une règle sans republier sur l'App Store. Sur un
+// identifiant inconnu, elle ajoute un jeu.
 //
-// Seuls des champs de présentation sont concernés. `engine`, `team` et `high`
-// restent dans le code : le moteur désigne une fonction de calcul, et changer
-// le sens de victoire à distance réécrirait le vainqueur de parties déjà
-// terminées.
+// Sur un jeu livré, `engine`, `team` et `high` restent dans le code : le moteur
+// désigne une fonction de calcul, et changer le sens de victoire à distance
+// réécrirait le vainqueur de parties déjà terminées.
 // Clé dans le document Firestore → champ local. Les deux diffèrent : le
 // document parle la langue d'iOS (`category`, `defaultTarget`), que ce fichier
 // abrège depuis toujours. Sans cette table, une correction de catégorie
@@ -83,40 +83,113 @@ const OVERRIDABLE = {
   defaultTarget: "target",
 };
 
+// Les seuls moteurs qu'un document peut désigner, et leur nom dans le document.
+//
+// Trois moteurs génériques : ceux qui se contentent d'un nombre par manche. Les
+// autres — belote, papayoo, yam's, mölkky, phase 10 — supposent un écran de
+// saisie dédié, donc du code. Le vocabulaire est neutre parce que le même
+// document est lu par le site et par l'app iOS, qui ne nomment pas leurs
+// moteurs pareil : ici « rounds » et « points » retombent tous deux sur le
+// comptage cumulé, là-bas ils désignent deux moteurs distincts.
+const REMOTE_ENGINES = {
+  points: "cumul",
+  countdown: "countdown",
+  rounds: "cumul",
+};
+
 const CACHE_KEY = "sm.catalog";
 
+// Le catalogue livré, gardé intact. `applyCatalogOverrides` repart toujours de
+// lui plutôt que de corriger `GAMES` sur place : c'est ce qui fait qu'un
+// document supprimé dans la console rend au jeu sa valeur d'origine, au lieu de
+// laisser la dernière correction en place jusqu'au prochain rechargement.
+const SHIPPED = GAMES.map((g) => ({ ...g }));
+const SHIPPED_IDS = new Set(SHIPPED.map((g) => g.id));
+
+const isValidId = (id) =>
+  typeof id === "string" && id.length > 0 && id.length <= 40 && /^[a-z0-9-]+$/.test(id);
+
+const isKnownCategory = (key) => CATEGORIES.some(([k]) => k !== "all" && k === key);
+
 /**
- * Applique des corrections sur le catalogue en place.
+ * Construit un jeu à partir d'un document dont l'identifiant est inconnu.
  *
- * Un identifiant inconnu est ignoré : un jeu ne peut pas être ajouté à
- * distance, puisqu'il lui faudrait un moteur, et un moteur est du code.
- * Renvoie le nombre de jeux réellement modifiés.
+ * Rend `null` dès que le document ne décrit pas un jeu jouable — sans nom, sans
+ * moteur reconnu, ou avec un identifiant qui n'est pas un slug. Une faute de
+ * frappe dans la console ne peut donc pas ajouter un jeu cassé : au pire, il
+ * n'apparaît pas.
+ */
+function addedGame(id, fields) {
+  if (!isValidId(id)) return null;
+  const name = typeof fields.name === "string" ? fields.name.trim() : "";
+  const engine = REMOTE_ENGINES[fields.engine];
+  if (!name || !engine) return null;
+
+  const positive = (v) => (Number.isFinite(v) && v >= 0 ? v : 0);
+  return {
+    id,
+    name,
+    cat: isKnownCategory(fields.category) ? fields.category : "societe",
+    engine,
+    team: fields.isTeamGame === true,
+    target: positive(fields.defaultTarget),
+    // Le plus haut total gagne, sauf mention contraire explicite.
+    high: fields.higherWins !== false,
+    roundLimit: positive(fields.roundLimit),
+    rules: typeof fields.rules === "string" ? fields.rules : "",
+  };
+}
+
+/** Corrige la présentation d'un jeu livré, champ par champ. */
+function correct(game, fields) {
+  for (const [remoteKey, localKey] of Object.entries(OVERRIDABLE)) {
+    if (!Object.prototype.hasOwnProperty.call(fields, remoteKey)) continue;
+    const value = fields[remoteKey];
+    // Une valeur du mauvais type ferait plus de dégâts que pas de correction du
+    // tout : un objectif en chaîne casserait toutes les comparaisons.
+    const expected = localKey === "target" ? "number" : "string";
+    if (typeof value !== expected) continue;
+    if (expected === "number" && (!Number.isFinite(value) || value < 0)) continue;
+    // Un champ vidé par erreur effacerait le nom d'un jeu ou ses règles : mieux
+    // vaut garder la valeur embarquée.
+    if (expected === "string" && value.trim() === "") continue;
+    // Une catégorie inconnue rendrait le jeu introuvable sous chaque onglet sauf
+    // « Tous » : mieux vaut ignorer la valeur que masquer le jeu.
+    if (localKey === "cat" && !isKnownCategory(value)) continue;
+    game[localKey] = value;
+  }
+}
+
+/**
+ * Reconstruit le catalogue depuis celui livré, corrigé et complété par le
+ * catalogue distant. Renvoie 0 si rien n'a bougé, 1 sinon.
+ *
+ * Même déroulé que `GameCatalog.apply` côté iOS, et pour la même raison : on
+ * repart du catalogue livré à chaque fois plutôt que d'accumuler des
+ * modifications, sans quoi rien ne serait réversible.
  */
 export function applyCatalogOverrides(overrides) {
   if (!overrides || typeof overrides !== "object") return 0;
-  let changed = 0;
-  for (const [id, fields] of Object.entries(overrides)) {
-    const game = GAMES.find((g) => g.id === id);
-    if (!game || !fields || typeof fields !== "object") continue;
-    let touched = false;
-    for (const [remoteKey, localKey] of Object.entries(OVERRIDABLE)) {
-      if (!(remoteKey in fields)) continue;
-      const value = fields[remoteKey];
-      // Une valeur du mauvais type ferait plus de dégâts que pas de correction
-      // du tout : un objectif en chaîne casserait toutes les comparaisons.
-      const expected = localKey === "target" ? "number" : "string";
-      if (typeof value !== expected) continue;
-      if (expected === "number" && (!Number.isFinite(value) || value < 0)) continue;
-      // Un champ vidé par erreur effacerait le nom d'un jeu ou ses règles :
-      // mieux vaut garder la valeur embarquée.
-      if (expected === "string" && value.trim() === "") continue;
-      if (game[localKey] === value) continue;
-      game[localKey] = value;
-      touched = true;
-    }
-    if (touched) changed += 1;
+  const before = JSON.stringify(GAMES);
+
+  const next = SHIPPED.map((g) => ({ ...g }));
+  for (const game of next) {
+    const fields = overrides[game.id];
+    if (fields && typeof fields === "object") correct(game, fields);
   }
-  return changed;
+
+  // Les jeux ajoutés viennent après les jeux livrés, classés par nom : Firestore
+  // ne rend pas ses documents dans un ordre dont on puisse dépendre, et les deux
+  // clients doivent afficher la même liste.
+  const added = Object.entries(overrides)
+    .filter(([id, fields]) => !SHIPPED_IDS.has(id) && fields && typeof fields === "object")
+    .map(([id, fields]) => addedGame(id, fields))
+    .filter((g) => g !== null)
+    .sort((a, b) => a.name.localeCompare(b.name, "fr"));
+
+  GAMES.length = 0;
+  GAMES.push(...next, ...added);
+  return JSON.stringify(GAMES) === before ? 0 : 1;
 }
 
 /** Relit les corrections mises en cache, pour les avoir dès le premier écran
@@ -245,16 +318,22 @@ export const SYMBOL_GLYPHS = {
       <path d="M11 11.4v4M7.8 19h6.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>`,
 };
 
+// Pictogramme par défaut, pour un jeu que ce client ne connaît pas encore —
+// un jeu venu du catalogue distant, ou une partie synchronisée depuis une
+// version plus récente. Un dé convient à n'importe quel jeu, là où le SVG vide
+// qu'on rendait avant passait pour un défaut d'affichage.
+const DEFAULT_GLYPH = `<rect x="3" y="3" width="16" height="16" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="7.4" cy="7.4" r="1.3" fill="currentColor"/><circle cx="14.6" cy="7.4" r="1.3" fill="currentColor"/>
+      <circle cx="7.4" cy="14.6" r="1.3" fill="currentColor"/><circle cx="14.6" cy="14.6" r="1.3" fill="currentColor"/>`;
+
 /**
  * Pictogramme d'un jeu.
  *
- * Un jeu personnalisé n'a pas de tracé à lui : il désigne un des symboles
- * ci-dessus. Le paramètre `symbol` est donc lu en second — d'abord le jeu
- * édité, ensuite le symbole choisi, et un cadre vide si on n'a ni l'un ni
- * l'autre.
+ * Trois sources, dans cet ordre : le tracé du jeu édité, puis le symbole choisi
+ * pour un jeu personnalisé, et enfin le dé par défaut — un jeu inconnu de ce
+ * client vaut mieux qu'un cadre vide, qui passait pour un défaut d'affichage.
  */
 export function glyph(gameId, size = 24, symbol = null) {
-  const d = GLYPHS[gameId] ?? (symbol ? SYMBOL_GLYPHS[symbol] : null);
-  if (!d) return `<svg viewBox="0 0 22 22" width="${size}" height="${size}" aria-hidden="true"></svg>`;
+  const d = GLYPHS[gameId] ?? (symbol ? SYMBOL_GLYPHS[symbol] : null) ?? DEFAULT_GLYPH;
   return `<svg viewBox="0 0 22 22" width="${size}" height="${size}" aria-hidden="true" focusable="false">${d}</svg>`;
 }

@@ -67,6 +67,7 @@ struct Game421ScoringView: View {
             .padding()
         }
         .navigationTitle(session.gameName)
+        .nightBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -108,7 +109,7 @@ struct Game421ScoringView: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
-        .background(Color(.secondarySystemBackground))
+        .background(Color.cloud)
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
@@ -153,8 +154,8 @@ struct Game421ScoringView: View {
             .disabled(loser == nil)
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(.separator), lineWidth: 0.5))
+        .background(Color.cloud.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.hairline, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -179,8 +180,8 @@ struct Game421ScoringView: View {
             .disabled(winner == nil || loser == nil || winner == loser)
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(.separator), lineWidth: 0.5))
+        .background(Color.cloud.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.hairline, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -230,7 +231,7 @@ struct Game421ScoringView: View {
         Button(action: action) {
             Text(LocalizedStringKey(label)).font(.caption.weight(.medium)).lineLimit(1).minimumScaleFactor(0.7)
                 .frame(maxWidth: .infinity).padding(.vertical, 8)
-                .background(selected ? Color.brandLight : Color(.secondarySystemBackground))
+                .background(selected ? Color.brandLight : Color.cloud)
                 .foregroundStyle(selected ? Color.brandDark : Color.secondary)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.brand : Color.clear, lineWidth: 1.5))
                 .clipShape(RoundedRectangle(cornerRadius: 8))

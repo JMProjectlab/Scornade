@@ -1,9 +1,28 @@
 import Foundation
 
+// Décodage tolérant des énumérations ci-dessous.
+//
+// Une valeur inconnue n'est pas une donnée corrompue : c'est une donnée écrite
+// par une version plus récente — un jeu venu du catalogue distant, une partie
+// synchronisée depuis un appareil déjà mis à jour. Le décodage strict de Swift
+// ferait échouer tout l'objet, et `Store.decodeAll` jetterait silencieusement
+// la partie entière : l'utilisateur verrait disparaître une ligne de son
+// historique sans rien comprendre. Chaque énumération écrit donc son propre
+// `init(from:)`, plutôt qu'un protocole partagé qui entrerait en concurrence
+// avec la conformance `Codable` synthétisée pour les énumérations à valeur brute.
+
 // How scores evolve during a game.
 enum ScoreDirection: String, Codable {
     case accumulate   // start at 0, add points, reach a target
     case countdown    // start at target, subtract, reach 0
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        // Le cumul est le sens le plus courant, et le moins trompeur : un
+        // compte à rebours pris pour un cumul affiche des totaux visiblement
+        // étranges, là où l'inverse afficherait un vainqueur faux sans le dire.
+        self = ScoreDirection(rawValue: raw) ?? .accumulate
+    }
 }
 
 // Maps to the "scoring engines" from the design. Simplified for the MVP.
@@ -16,6 +35,14 @@ enum ScoringEngine: String, Codable {
     case phaseRace          // Phase 10 : on marque des pénalités, mais c'est la
                             // dixième phase franchie qui gagne
 
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        // Le moteur générique sait compter n'importe quel jeu, faute de mieux :
+        // un écran de saisie inconnu ne s'invente pas, un champ « points de la
+        // manche » se comprend toujours.
+        self = ScoringEngine(rawValue: raw) ?? .cumulativePoints
+    }
+
     var direction: ScoreDirection {
         self == .countdown ? .countdown : .accumulate
     }
@@ -26,6 +53,47 @@ struct Player: Identifiable, Codable, Hashable {
     var name: String
     var colorIndex: Int
     var email: String? = nil
+    /// Identifiant du compte Scornade de cette personne, posé en scannant son
+    /// code joueur. Optionnel : les fiches déjà enregistrées se décodent sans.
+    var linkedUid: String? = nil
+}
+
+/// Ce que porte le QR code « Mon code joueur » : un lien vers le site, qui
+/// identifie un compte. Scanné depuis Scornade, il crée ou relie une fiche ;
+/// scanné avec l'appareil photo, il ouvre le site, qui propose l'App Store.
+struct PlayerInvite: Equatable {
+    var uid: String
+    var name: String
+    var email: String?
+
+    static let base = "https://jmprojectlab.fr/Scornade/"
+
+    init(uid: String, name: String, email: String?) {
+        self.uid = uid
+        self.name = name
+        self.email = email
+    }
+
+    var url: URL {
+        var c = URLComponents(string: Self.base)!
+        var items = [URLQueryItem(name: "rejoindre", value: uid), URLQueryItem(name: "n", value: name)]
+        if let email, !email.isEmpty { items.append(URLQueryItem(name: "e", value: email)) }
+        c.queryItems = items
+        return c.url!
+    }
+
+    /// Nil pour tout ce qui n'est pas un code joueur Scornade.
+    init?(string: String) {
+        guard let c = URLComponents(string: string),
+              c.host?.contains("jmprojectlab") == true,
+              let items = c.queryItems,
+              let uid = items.first(where: { $0.name == "rejoindre" })?.value, !uid.isEmpty,
+              let name = items.first(where: { $0.name == "n" })?.value, !name.isEmpty
+        else { return nil }
+        self.uid = uid
+        self.name = name
+        self.email = items.first(where: { $0.name == "e" })?.value
+    }
 }
 
 struct Game: Identifiable, Hashable {
@@ -74,6 +142,14 @@ struct ScoreSession: Identifiable, Codable, Hashable {
     var pot: Int? = nil           // 421 : jetons restant dans la cave
     var jetons: [Int]? = nil      // 421 : jetons par joueur
     var roundLimit: Int? = nil    // nombre de manches imposé par la règle (Cinq Rois : 11)
+    /// Mölkky : ratés consécutifs par joueur, et joueurs éliminés.
+    ///
+    /// Ces deux-là appartiennent à la partie, pas à l'écran : trois ratés
+    /// d'affilée éliminent un joueur, et cette élimination doit survivre à un
+    /// retour à l'accueil, à une relance de l'application et au passage sur un
+    /// autre appareil. Mêmes noms que côté web — c'est le même document JSON.
+    var molkkyMisses: [Int]? = nil
+    var molkkyOut: [Bool]? = nil
     /// Phase 10 : pour chaque manche, qui a validé sa phase.
     ///
     /// C'est la trace qui compte, pas un compteur : une manche annulée doit
@@ -85,6 +161,41 @@ struct ScoreSession: Identifiable, Codable, Hashable {
             acc + (round.indices.contains(i) ? round[i] : 0)
         }
         return direction == .countdown ? max(0, target - sum) : sum
+    }
+
+    /// Belote : points restés en jeu après la dernière donne, à encaisser par
+    /// le camp qui remportera la suivante.
+    ///
+    /// Seule la dernière donne compte : une donne tranchée solde l'ardoise. Les
+    /// litiges, eux, s'enchaînent — deux de suite mettent 162 points en jeu.
+    var belotePending: Int {
+        guard let last = beloteRounds?.last, last.isLitige else { return 0 }
+        return (last.pending ?? 0) + BeloteRound.litigePoints
+    }
+
+    /// Mölkky : ce joueur est-il éliminé ?
+    func isOut(_ i: Int) -> Bool { molkkyOut?.indices.contains(i) == true && molkkyOut![i] }
+
+    /// Mölkky : enregistre un lancer — ses points et son raté.
+    ///
+    /// Les deux vont ensemble : trois ratés d'affilée éliminent, et un lancer
+    /// réussi remet le compteur à zéro. Même règle que `molkkyThrow` côté web.
+    mutating func recordMolkkyThrow(player: Int, delta: Int, missed: Bool) {
+        let n = entrants.count
+        var deltas = Array(repeating: 0, count: n)
+        if deltas.indices.contains(player) { deltas[player] = delta }
+        rounds.append(deltas)
+
+        var misses = molkkyMisses ?? Array(repeating: 0, count: n)
+        var out = molkkyOut ?? Array(repeating: false, count: n)
+        if misses.count != n { misses = Array(repeating: 0, count: n) }
+        if out.count != n { out = Array(repeating: false, count: n) }
+        if misses.indices.contains(player) {
+            misses[player] = missed ? misses[player] + 1 : 0
+            if misses[player] >= 3 { out[player] = true }
+        }
+        molkkyMisses = misses
+        molkkyOut = out
     }
 
     /// Phase 10 : la phase en cours d'un joueur, de 1 à 10, puis 11 une fois
@@ -158,6 +269,22 @@ struct BeloteRound: Codable, Hashable {
     var cardPoints: [Int]     // points aux cartes [équipe0, équipe1], somme = 162
     var belote: [Bool]        // belote/rebelote +20 [équipe0, équipe1]
     var capotTeam: Int?       // équipe ayant fait capot, sinon nil
+    /// Points remis en jeu par le ou les litiges qui précèdent cette donne, et
+    /// encaissés par le camp qui la remporte.
+    ///
+    /// Optionnel pour rester lisible : les parties enregistrées avant la règle
+    /// du litige n'ont pas cette clé, et doivent continuer à se décoder.
+    var pending: Int? = nil
+
+    /// Le partage exact des 162 points : 81 de chaque côté.
+    static let litigePoints = 81
+
+    /// Litige : le preneur fait exactement la moitié, le contrat n'est ni tenu
+    /// ni chuté.
+    var isLitige: Bool {
+        capotTeam == nil && cardPoints.indices.contains(takerTeam)
+            && cardPoints[takerTeam] == Self.litigePoints
+    }
 
     var contractMade: Bool {
         if capotTeam != nil { return true }
@@ -166,19 +293,29 @@ struct BeloteRound: Codable, Hashable {
 
     func deltas() -> [Int] {
         var s = [0, 0]
+        let t = takerTeam, def = 1 - takerTeam
+        // Points mis en jeu par le ou les litiges précédents.
+        let carried = pending ?? 0
         if let c = capotTeam {
-            s[c] = 252 + (belote[c] ? 20 : 0)
+            s[c] = 252 + (belote[c] ? 20 : 0) + carried
             let o = 1 - c
             s[o] = belote[o] ? 20 : 0
             return s
         }
-        if cardPoints[takerTeam] >= 82 {
-            for t in 0..<2 { s[t] = cardPoints[t] + (belote[t] ? 20 : 0) }
+        if isLitige {
+            // 81 partout : la défense marque ses 81 points, ceux du preneur sont
+            // remis en jeu pour la donne suivante — avec ceux déjà en attente.
+            s[def] = Self.litigePoints + (belote[def] ? 20 : 0)
+            s[t] = belote[t] ? 20 : 0
+            return s
+        }
+        if cardPoints[t] >= 82 {
+            for i in 0..<2 { s[i] = cardPoints[i] + (belote[i] ? 20 : 0) }
+            s[t] += carried
         } else {
             // Le preneur est "dedans" : les 162 points vont à la défense
-            let def = 1 - takerTeam
-            s[def] = 162 + (belote[def] ? 20 : 0)
-            s[takerTeam] = belote[takerTeam] ? 20 : 0
+            s[def] = 162 + (belote[def] ? 20 : 0) + carried
+            s[t] = belote[t] ? 20 : 0
         }
         return s
     }

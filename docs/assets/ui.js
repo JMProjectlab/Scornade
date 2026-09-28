@@ -4,6 +4,7 @@
 // assez rapide à cette échelle, et ça évite d'avoir à synchroniser à la main
 // une douzaine de fragments de vue.
 
+import qrcode from "./vendor/qrcode.mjs";
 import { CATEGORIES, HUES, glyph } from "./data.js";
 import {
   CUSTOM_ENGINES, CUSTOM_SYMBOLS, blankCustomGame, customGameErrors, isCustomGame,
@@ -93,9 +94,19 @@ function openRoundEditor(session, index) {
 
 // --- écrans ---------------------------------------------------------------
 
+/** Invitation reçue par lien, présentée à qui n'est pas connecté. */
+function inviteIntro() {
+  const inv = S.state.pendingInvite;
+  if (!inv) return "";
+  return `<div class="card" style="text-align:left;margin-bottom:22px">
+    <p style="margin:0 0 10px"><strong>${esc(inv.name)} vous invite sur Scornade.</strong><br>
+    <span class="hint">Connectez-vous pour l'ajouter à vos joueurs. Sur iPhone, l'application fait la même chose.</span></p>
+    <a class="btn primary" style="text-align:center;margin-bottom:0" href="https://apps.apple.com/fr/app/id6802812197">Télécharger l'app iPhone</a></div>`;
+}
+
 function screenLogin() {
-  return `<div class="login">
-    <div class="mark">Sc</div>
+  return `<div class="login">${inviteIntro()}
+    <img class="mark" src="assets/img/apple-touch-icon.png" alt="">
     <h1>Scornade</h1>
     <p class="tagline">Comptez. Gagnez. Recommencez.</p>
     <button class="btn" style="background:var(--ink);color:var(--bg)" data-act="sign-apple">
@@ -103,6 +114,7 @@ function screenLogin() {
     <div class="sep">ou</div>
     <button class="btn outline" data-act="sign-google">Se connecter avec Google</button>
     <p class="legal">Un compte permet de retrouver vos parties sur vos autres appareils.<br>
+      <a href="https://apps.apple.com/fr/app/id6802812197">Application iPhone</a> ·
       <a href="politique-de-confidentialite.html">Politique de confidentialité</a></p>
   </div>`;
 }
@@ -113,6 +125,28 @@ function screenHome() {
   const games = S.state.filter === "all" ? catalog : catalog.filter((g) => g.cat === S.state.filter);
 
   let html = "";
+  // Son propre code, ouvert une fois connecté : rien à ajouter.
+  if (S.state.pendingInvite?.uid === S.state.user?.id) S.state.pendingInvite = null;
+  const inv = S.state.pendingInvite;
+  if (inv) {
+    const match = S.bestMatch(inv);
+    html += `<div class="card" role="region" aria-label="Invitation">
+      <p style="margin:0 0 12px"><strong>Ajouter ${esc(inv.name)} à vos joueurs ?</strong><br>
+      <span class="hint">${inv.email ? esc(inv.email) + " · " : ""}${match
+        ? `Sa fiche « ${esc(match.name)} » sera reliée à son compte.`
+        : "Une fiche reliée à son compte sera créée."}</span></p>
+      <button class="btn primary" data-act="accept-invite" data-id="${match?.id ?? ""}">Ajouter</button>
+      <button class="btn secondary" data-act="dismiss-invite" style="margin-bottom:0">Ignorer</button></div>`;
+  }
+  const found = S.state.pendingImport;
+  if (found) {
+    html += `<div class="card" role="region" aria-label="Import">
+      <p style="margin:0 0 12px"><strong>Importer vos parties sans compte ?</strong><br>
+      <span class="hint">Ce navigateur garde ${found.players} joueur(s) et ${found.sessions} partie(s)
+      créés sans compte. Un joueur du même nom que l'un des vôtres sera considéré comme la même personne.</span></p>
+      <button class="btn primary" data-act="import-guest">Importer</button>
+      <button class="btn secondary" data-act="skip-import" style="margin-bottom:0">Non merci</button></div>`;
+  }
   if (active) {
     const line = active.entrants.map((e, i) => `${e.name} ${E.total(active, i)}`).join(" · ");
     html += `<button class="active-card" data-act="open-session" data-id="${active.id}">
@@ -292,9 +326,12 @@ function screenNewGame() {
       </div></div>`;
   }
 
-  html += `<button class="btn primary" data-act="start" ${canStart ? "" : "disabled"}>Lancer la partie</button>
-    <p class="hint" style="text-align:center">${g.team
+  html += `<button class="btn primary" data-act="start" ${canStart ? "" : "disabled"}>Lancer la partie</button>`;
+  // La consigne n'explique que le bouton désactivé : elle part avec lui.
+  if (!canStart) {
+    html += `<p class="hint" style="text-align:center">${g.team
       ? "Il faut au moins un joueur par équipe." : "Il faut au moins deux joueurs."}</p>`;
+  }
   return html;
 }
 
@@ -513,6 +550,8 @@ function scoringBelote(session) {
   const p1 = parseInt(f.p1, 10) || 0;
   const sum = p0 + p1;
   const canValidate = f.taker !== null && f.suit !== null && (f.capot !== null || sum === 162);
+  // Points laissés en jeu par un litige : ils iront au camp qui gagne la donne.
+  const pending = E.belotePending(session.beloteRounds ?? []);
 
   let left = "";
   if (session.seriesWins) {
@@ -534,10 +573,12 @@ function scoringBelote(session) {
   const rows = session.beloteRounds?.length
     ? session.beloteRounds.map((r, i) => ({ r, i })).reverse().map(({ r, i }) => {
         const d = E.beloteDeltas(r);
-        const made = E.beloteContractMade(r);
+        const outcome = E.beloteOutcome(r);
+        const mark = { fait: "✓", litige: "litige", chute: "chute" }[outcome];
+        const cls = { fait: "ok", litige: "tie", chute: "ko" }[outcome];
         return `<div class="hist"><span class="ix">D${i + 1}</span>
           <span class="dt">É${r.takerTeam + 1} prend ${r.suit}</span>
-          <span class="st ${made ? "ok" : "ko"}">${made ? "✓" : "chute"}</span>
+          <span class="st ${cls}">${mark}</span>
           <span class="tab" style="font-size:13px">${d[0]} – ${d[1]}</span>
           <button class="icon-btn" data-act="del-round" data-i="${i}"
             aria-label="Supprimer la donne ${i + 1}">✕</button></div>`;
@@ -560,7 +601,10 @@ function scoringBelote(session) {
       `</div><p class="hint">Atout</p><div class="chips">` +
       ["♠", "♥", "♦", "♣"].map((s) => `<button class="chip suit${s === "♥" || s === "♦" ? " red" : ""}"
         data-act="b-suit" data-v="${s}" aria-pressed="${f.suit === s}">${s}</button>`).join("") +
-      `</div><p class="hint">Points aux cartes (total 162)</p>
+      `</div>` +
+      (pending ? `<p class="note tie" style="margin:12px 0 0">${pending} points sont en jeu, laissés par le
+         litige : ils reviennent au camp qui remporte cette donne.</p>` : "") +
+      `<p class="hint">Points aux cartes (total 162)</p>
       <div style="display:flex;gap:12px;margin-bottom:10px">
         <div style="flex:1"><label class="field" for="b-p0">Équipe 1</label>
           <input type="number" inputmode="numeric" class="num b-pts" id="b-p0" data-t="0"
@@ -580,12 +624,23 @@ function scoringBelote(session) {
         <button class="chip" data-act="b-capot" data-v="1" aria-pressed="${f.capot === 1}">Capot É2</button></div>`;
 
     if (canValidate) {
-      const round = { takerTeam: f.taker, suit: f.suit, cardPoints: [p0, p1], belote: [f.b0, f.b1], capotTeam: f.capot };
+      const round = { takerTeam: f.taker, suit: f.suit, cardPoints: [p0, p1],
+                      belote: [f.b0, f.b1], capotTeam: f.capot, pending };
       const d = E.beloteDeltas(round);
-      const made = E.beloteContractMade(round);
-      right += `<div class="result ${made ? "ok" : "ko"}">
-        <b>${made ? `${esc(session.entrants[f.taker].name)} réussit son contrat ${f.suit}`
-                  : `${esc(session.entrants[f.taker].name)} est dedans — chute !`}</b>
+      const outcome = E.beloteOutcome(round);
+      const takerName = esc(session.entrants[f.taker].name);
+      const title = {
+        fait: `${takerName} réussit son contrat ${f.suit}`,
+        litige: `Litige — 81 partout`,
+        chute: `${takerName} est dedans — chute !`,
+      }[outcome];
+      const cls = { fait: "ok", litige: "tie", chute: "ko" }[outcome];
+      right += `<div class="result ${cls}">
+        <b>${title}</b>
+        ${outcome === "litige"
+          ? `<p style="margin:0 0 6px;font-size:13px">${takerName} ne marque rien : ses ${E.BELOTE_LITIGE} points
+             sont remis en jeu pour la donne suivante, où ${pending + E.BELOTE_LITIGE} points seront en jeu.</p>`
+          : ""}
         <div class="ln"><span>Équipe 1</span><span>+${d[0]} pts</span></div>
         <div class="ln"><span>Équipe 2</span><span>+${d[1]} pts</span></div></div>`;
     }
@@ -728,10 +783,34 @@ function scoringYams(session) {
   return { left, right };
 }
 
+/** Le jeu d'une partie, ou un jeu générique reconstruit depuis la partie
+ *  elle-même.
+ *
+ *  Une partie peut désigner un jeu que ce client ne connaît pas : synchronisée
+ *  depuis un appareil à jour, ou créée pendant qu'un jeu du catalogue distant
+ *  était visible. La partie porte déjà tout ce qu'il faut pour la compter — nom,
+ *  objectif, sens de victoire, sens du score — et le moteur générique sait faire
+ *  le reste. Mieux vaut compter la partie que planter sur son écran. */
+function gameOfSession(session) {
+  const known = S.gameById(session.gameId);
+  if (known) return known;
+  return {
+    id: session.gameId,
+    name: session.gameName || "Partie",
+    cat: "societe",
+    engine: "cumul",
+    team: false,
+    target: session.target ?? 0,
+    high: session.higherWins ?? true,
+    roundLimit: session.roundLimit ?? 0,
+    rules: "",
+  };
+}
+
 function screenScoring() {
   const session = S.sessionById(view.id);
   if (!session) return `<div class="empty">Partie introuvable.</div>`;
-  const game = S.gameById(session.gameId);
+  const game = gameOfSession(session);
 
   let parts;
   // Un jeu personnalisé n'a que le comptage générique : c'est le seul qui ne
@@ -763,12 +842,37 @@ function screenPlayers() {
       <input type="text" id="new-player" placeholder="Nom du joueur" aria-label="Nom du joueur">
       <button class="ghost" data-act="add-player">Ajouter</button></div></div>`;
 
+  if (S.state.user) {
+    // Mon code joueur : les autres m'ajoutent en le scannant.
+    const url = S.inviteURL(S.state.user);
+    const qr = qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    html += `<div class="section-label">Mon code joueur</div><div class="card" style="text-align:center">
+      <div class="qr" aria-label="QR code de ${esc(S.state.user.name)}" role="img">${qr.createSvgTag({ cellSize: 6, margin: 4, scalable: true })}</div>
+      <p class="hint">Faites-le scanner par un autre joueur : vous apparaîtrez dans ses joueurs. S'il n'a pas Scornade, le code l'y emmène.</p>
+      <button class="btn secondary" data-act="share-code" data-url="${esc(url)}" style="margin-bottom:0">Envoyer le lien</button></div>`;
+  }
+
   html += `<div class="card">` + (S.state.players.map((p) =>
     `<div class="row">${avatar(p.name, p.colorIndex)}
-      <span class="name">${esc(p.name)}</span>
+      <span class="name">${esc(p.name)}${p.linkedUid ? ` <span class="linked" title="Relié à son compte" aria-label="relié à son compte">🔗</span>` : ""}</span>
       <button class="icon-btn" data-act="del-player" data-id="${p.id}"
         aria-label="Supprimer ${esc(p.name)}">Supprimer</button></div>`).join("")
     || `<p class="hint" style="margin:0">Aucun joueur pour l'instant.</p>`) + `</div>`;
+
+  // Deux fiches pour la même personne (« Manon » saisie deux fois) : on les réunit.
+  if (S.state.players.length >= 2) {
+    const opts = S.state.players.map((p) =>
+      `<option value="${p.id}">${esc(p.email ? `${p.name} · ${p.email}` : p.name)}</option>`).join("");
+    html += `<div class="section-label">Fusionner deux fiches</div><div class="card">
+      <label class="field" for="fuse-kept">Fiche à garder</label>
+      <select id="fuse-kept"><option value="">Choisir</option>${opts}</select>
+      <label class="field" for="fuse-dup" style="margin-top:12px">Fiche à fusionner</label>
+      <select id="fuse-dup"><option value="">Choisir</option>${opts}</select>
+      <p class="hint">Les parties et les statistiques de la seconde fiche passent sur la première, puis la seconde est supprimée.</p>
+      <button class="btn primary" data-act="fuse-players" style="margin-bottom:0">Fusionner</button></div>`;
+  }
 
   html += `<div class="section-label">Apparence</div><div class="card">
     <label class="field" for="theme-select">Thème</label>
@@ -1014,6 +1118,7 @@ export function render() {
         ${view.screen === key ? 'aria-current="page"' : ""}>${label}</button>`).join("") +
     `<div class="rail-foot">
       ${S.state.user ? `<button class="rail-link" data-act="sign-out">Se déconnecter</button>` : ""}
+      <a class="rail-link" href="https://apps.apple.com/fr/app/id6802812197">Application iPhone</a>
       <a class="rail-link" href="politique-de-confidentialite.html">Confidentialité</a>
     </div></nav>`;
 
@@ -1269,6 +1374,9 @@ export function bindEvents() {
           takerTeam: f.taker, suit: f.suit,
           cardPoints: [parseInt(f.p0, 10) || 0, parseInt(f.p1, 10) || 0],
           belote: [f.b0, f.b1], capotTeam: f.capot,
+          // Les points en jeu sont inscrits dans la donne : le détail affiché
+          // reste celui qui a servi au calcul, même des mois plus tard.
+          pending: E.belotePending(session.beloteRounds ?? []),
         };
         session.beloteRounds.push(round);
         S.addRound(session, E.beloteDeltas(round));
@@ -1290,13 +1398,9 @@ export function bindEvents() {
         const score = Number(el.dataset.v);
         const before = scratch.current;
         playTurn(session, E.molkkyThrow(session, before, score));
-        if (score === 0) {
-          session.molkkyMisses[before] += 1;
-          if (session.molkkyMisses[before] >= 3) {
-            session.molkkyOut[before] = true;
-            scratch.note = "Trois ratés — joueur éliminé.";
-          }
-        } else session.molkkyMisses[before] = 0;
+        if (E.molkkyMiss(session, before, score === 0)) {
+          scratch.note = "Trois ratés — joueur éliminé.";
+        }
         S.commit();
         render();
         break;
@@ -1318,6 +1422,39 @@ export function bindEvents() {
         break;
       }
       case "del-player": S.removePlayer(el.dataset.id); render(); break;
+      case "fuse-players": {
+        const kept = document.getElementById("fuse-kept").value;
+        const dup = document.getElementById("fuse-dup").value;
+        if (!kept || !dup) return toast("Choisissez les deux fiches.");
+        if (kept === dup) return toast("Choisissez deux fiches différentes.");
+        const a = S.playerById(dup)?.name, b = S.playerById(kept)?.name;
+        if (!confirm(`« ${a} » rejoint « ${b} ». Cette action ne s'annule pas.`)) return;
+        S.fusePlayers(dup, kept);
+        toast("Fiches fusionnées.");
+        render();
+        break;
+      }
+      case "accept-invite": {
+        const inv = S.state.pendingInvite;
+        S.state.pendingInvite = null;
+        sessionStorage.removeItem("sm.invite");
+        if (inv) { S.linkInvite(inv, el.dataset.id || null); toast(`${inv.name} ajouté à vos joueurs.`); }
+        render();
+        break;
+      }
+      case "dismiss-invite":
+        S.state.pendingInvite = null;
+        sessionStorage.removeItem("sm.invite");
+        render();
+        break;
+      case "share-code": {
+        const url = el.dataset.url;
+        if (navigator.share) navigator.share({ title: "Mon code joueur Scornade", url }).catch(() => {});
+        else navigator.clipboard?.writeText(url).then(() => toast("Lien copié."));
+        break;
+      }
+      case "import-guest": S.resolveGuestImport(true); render(); break;
+      case "skip-import": S.resolveGuestImport(false); render(); break;
 
       case "sign-apple": auth?.signInApple().catch((e) => toast(e.message)); break;
       case "sign-google": auth?.signInGoogle().catch((e) => toast(e.message)); break;
@@ -1355,7 +1492,7 @@ export function bindEvents() {
     if (el.classList.contains("entry")) {
       scratch.inputs[Number(el.dataset.i)] = el.value;
       // Papayoo affiche un compteur vivant : il faut redessiner à la frappe.
-      if (session && S.gameById(session.gameId)?.engine === "payoo") renderKeepingFocus();
+      if (session && gameOfSession(session).engine === "payoo") renderKeepingFocus();
       return;
     }
     if (el.classList.contains("b-pts")) {
