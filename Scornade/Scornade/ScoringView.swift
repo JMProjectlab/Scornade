@@ -56,7 +56,7 @@ struct ScoringView: View {
                 }
                 .font(.subheadline)
                 .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(Color(.secondarySystemBackground))
+                .background(Color.cloud)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
                 if session.isFinished, let w = session.winnerIndex {
@@ -102,6 +102,7 @@ struct ScoringView: View {
             .padding()
         }
         .navigationTitle(session.gameName)
+        .nightBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -207,7 +208,7 @@ struct EntrantRow: View {
             }
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground))
+        .background(Color.cloud)
         .overlay(
             RoundedRectangle(cornerRadius: 14)
                 .stroke(isLeader ? Color.brand : Color.clear, lineWidth: 2)

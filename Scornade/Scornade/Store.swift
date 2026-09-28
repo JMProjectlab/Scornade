@@ -63,15 +63,6 @@ final class Store: ObservableObject {
         // Les corrections déjà reçues s'appliquent avant le premier écran :
         // pas de libellé qui change sous les yeux une seconde plus tard.
         GameCatalog.loadCached()
-        if players.isEmpty {
-            players = [
-                Player(name: "Jimmy", colorIndex: 0),
-                Player(name: "Marie", colorIndex: 2),
-                Player(name: "Paul", colorIndex: 1),
-                Player(name: "Sophie", colorIndex: 3),
-            ]
-            saveLocalCacheOnly()
-        }
         startSyncIfSignedIn()
     }
 

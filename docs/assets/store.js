@@ -72,7 +72,9 @@ export function commit() {
 
 export const getLanguage = () => localStorage.getItem(KEY_LANG) || "system";
 export const setLanguage = (v) => { localStorage.setItem(KEY_LANG, v); emit(); };
-export const getTheme = () => localStorage.getItem(KEY_THEME) || "system";
+// Le thème nuit et braise de l'icône est le défaut ; « Système » et « Clair »
+// restent proposés dans les réglages.
+export const getTheme = () => localStorage.getItem(KEY_THEME) || "dark";
 export function setTheme(v) {
   localStorage.setItem(KEY_THEME, v);
   applyTheme();

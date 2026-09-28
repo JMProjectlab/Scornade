@@ -92,7 +92,7 @@ function openRoundEditor(session, index) {
 
 function screenLogin() {
   return `<div class="login">
-    <div class="mark">Sc</div>
+    <img class="mark" src="assets/img/apple-touch-icon.png" alt="">
     <h1>Scornade</h1>
     <p class="tagline">Comptez. Gagnez. Recommencez.</p>
     <button class="btn" style="background:var(--ink);color:var(--bg)" data-act="sign-apple">
@@ -100,6 +100,7 @@ function screenLogin() {
     <div class="sep">ou</div>
     <button class="btn outline" data-act="sign-google">Se connecter avec Google</button>
     <p class="legal">Un compte permet de retrouver vos parties sur vos autres appareils.<br>
+      <a href="https://apps.apple.com/fr/app/id6802812197">Application iPhone</a> ·
       <a href="politique-de-confidentialite.html">Politique de confidentialité</a></p>
   </div>`;
 }
@@ -178,9 +179,12 @@ function screenNewGame() {
       </div></div>`;
   }
 
-  html += `<button class="btn primary" data-act="start" ${canStart ? "" : "disabled"}>Lancer la partie</button>
-    <p class="hint" style="text-align:center">${g.team
+  html += `<button class="btn primary" data-act="start" ${canStart ? "" : "disabled"}>Lancer la partie</button>`;
+  // La consigne n'explique que le bouton désactivé : elle part avec lui.
+  if (!canStart) {
+    html += `<p class="hint" style="text-align:center">${g.team
       ? "Il faut au moins un joueur par équipe." : "Il faut au moins deux joueurs."}</p>`;
+  }
   return html;
 }
 
@@ -912,6 +916,7 @@ export function render() {
         ${view.screen === key ? 'aria-current="page"' : ""}>${label}</button>`).join("") +
     `<div class="rail-foot">
       ${S.state.user ? `<button class="rail-link" data-act="sign-out">Se déconnecter</button>` : ""}
+      <a class="rail-link" href="https://apps.apple.com/fr/app/id6802812197">Application iPhone</a>
       <a class="rail-link" href="politique-de-confidentialite.html">Confidentialité</a>
     </div></nav>`;
 

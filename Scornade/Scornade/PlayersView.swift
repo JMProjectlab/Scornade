@@ -96,6 +96,7 @@ struct PlayersView: View {
             }
         }
         .navigationTitle("Joueurs")
+        .nightBackground()
         .alert("Supprimer mes données ?", isPresented: $showDeleteConfirm) {
             Button("Supprimer", role: .destructive) { store.deleteAllData() }
             Button("Annuler", role: .cancel) {}

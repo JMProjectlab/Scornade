@@ -48,6 +48,7 @@ struct YamsScoringView: View {
             .padding()
         }
         .navigationTitle(session.gameName)
+        .nightBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -83,7 +84,7 @@ struct YamsScoringView: View {
                             Text("\(total(i))").font(.jmScore(20))
                         }
                         .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(selected == i ? Color.brandLight : Color(.secondarySystemBackground))
+                        .background(selected == i ? Color.brandLight : Color.cloud)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(selected == i ? Color.brand : Color.clear, lineWidth: 2))
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
@@ -127,8 +128,8 @@ struct YamsScoringView: View {
             }
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(.separator), lineWidth: 0.5))
+        .background(Color.cloud.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.hairline, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -200,7 +201,7 @@ struct YamsScoringView: View {
     private func chip(_ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(LocalizedStringKey(label)).font(.subheadline).frame(minWidth: 40).padding(.vertical, 6).padding(.horizontal, 4)
-                .background(selected ? Color.brandLight : Color(.secondarySystemBackground))
+                .background(selected ? Color.brandLight : Color.cloud)
                 .foregroundStyle(selected ? Color.brandDark : Color.secondary)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.brand : Color.clear, lineWidth: 1.5))
                 .clipShape(RoundedRectangle(cornerRadius: 8))

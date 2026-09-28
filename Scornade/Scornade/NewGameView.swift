@@ -97,6 +97,9 @@ struct NewGameView: View {
             }
         }
         .navigationTitle(game.name)
+        .nightBackground()
+        // Premier lancement : aucun joueur. Le champ s'ouvre de lui-même.
+        .onAppear { if store.players.isEmpty { showAddField = true } }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -126,6 +129,7 @@ struct NewGameView: View {
                     .padding()
                 }
                 .navigationTitle("Règles · \(game.name)")
+                .nightBackground()
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
