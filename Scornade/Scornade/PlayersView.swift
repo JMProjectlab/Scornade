@@ -6,6 +6,7 @@ struct PlayersView: View {
     @State private var newEmail = ""
     @State private var showDeleteConfirm = false
     @State private var showLogin = false
+    @State private var showFuse = false
     @AppStorage("sm.languagePreference") private var languagePreference = "system"
     @Environment(\.locale) private var locale
 
@@ -47,6 +48,11 @@ struct PlayersView: View {
                 }
                 .onDelete { idx in
                     for i in idx { store.removePlayer(store.players[i]) }
+                }
+                if store.players.count >= 2 {
+                    Button { showFuse = true } label: {
+                        Label("Fusionner deux fiches…", systemImage: "arrow.triangle.merge")
+                    }
                 }
             }
             Section("Compte") {
@@ -106,6 +112,9 @@ struct PlayersView: View {
         .sheet(isPresented: $showLogin) {
             LoginView().environmentObject(store)
         }
+        .sheet(isPresented: $showFuse) {
+            FusePlayersSheet().environmentObject(store)
+        }
     }
 
     /// Le chemin suit le nom du dépôt GitHub Pages ; il change si le dépôt est
@@ -124,5 +133,68 @@ struct PlayersView: View {
         case .google: return String(localized: "\(u.name) · Google", locale: locale)
         case .guest: return String(localized: "Sur cet appareil", locale: locale)
         }
+    }
+}
+
+/// Réunit deux fiches qui désignent la même personne, par exemple « Manon »
+/// créée une fois sous chaque compte.
+private struct FusePlayersSheet: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+    @State private var keptID: UUID?
+    @State private var duplicateID: UUID?
+    @State private var confirm = false
+
+    private var kept: Player? { keptID.flatMap { store.player(id: $0) } }
+    private var duplicate: Player? { duplicateID.flatMap { store.player(id: $0) } }
+    private var canFuse: Bool { kept != nil && duplicate != nil && keptID != duplicateID }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Picker("Fiche à garder", selection: $keptID) {
+                        Text("Choisir").tag(UUID?.none)
+                        ForEach(store.players) { Text(label($0)).tag(Optional($0.id)) }
+                    }
+                    Picker("Fiche à fusionner", selection: $duplicateID) {
+                        Text("Choisir").tag(UUID?.none)
+                        ForEach(store.players.filter { $0.id != keptID }) {
+                            Text(label($0)).tag(Optional($0.id))
+                        }
+                    }
+                } footer: {
+                    Text("Les parties et les statistiques de la seconde fiche passent sur la première, puis la seconde est supprimée.")
+                }
+                Section {
+                    Button("Fusionner") { confirm = true }
+                        .disabled(!canFuse)
+                }
+            }
+            .navigationTitle("Fusionner deux fiches")
+            .nightBackground()
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler") { dismiss() }
+                }
+            }
+            .alert("Fusionner ces fiches ?", isPresented: $confirm) {
+                Button("Fusionner", role: .destructive) {
+                    if let kept, let duplicate { store.fusePlayer(duplicate, into: kept) }
+                    dismiss()
+                }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("« \(duplicate?.name ?? "") » rejoint « \(kept?.name ?? "") ». Cette action ne s'annule pas.")
+            }
+        }
+    }
+
+    /// Le nom seul ne suffit pas à distinguer deux « Manon » : l'e-mail, quand
+    /// il existe, fait la différence.
+    private func label(_ p: Player) -> String {
+        if let email = p.email, !email.isEmpty { return "\(p.name) · \(email)" }
+        return p.name
     }
 }

@@ -110,6 +110,15 @@ function screenHome() {
   const games = S.state.filter === "all" ? GAMES : GAMES.filter((g) => g.cat === S.state.filter);
 
   let html = "";
+  const found = S.state.pendingImport;
+  if (found) {
+    html += `<div class="card" role="region" aria-label="Import">
+      <p style="margin:0 0 12px"><strong>Importer vos parties sans compte ?</strong><br>
+      <span class="hint">Ce navigateur garde ${found.players} joueur(s) et ${found.sessions} partie(s)
+      créés sans compte. Un joueur du même nom que l'un des vôtres sera considéré comme la même personne.</span></p>
+      <button class="btn primary" data-act="import-guest">Importer</button>
+      <button class="btn secondary" data-act="skip-import" style="margin-bottom:0">Non merci</button></div>`;
+  }
   if (active) {
     const line = active.entrants.map((e, i) => `${e.name} ${E.total(active, i)}`).join(" · ");
     html += `<button class="active-card" data-act="open-session" data-id="${active.id}">
@@ -673,6 +682,19 @@ function screenPlayers() {
         aria-label="Supprimer ${esc(p.name)}">Supprimer</button></div>`).join("")
     || `<p class="hint" style="margin:0">Aucun joueur pour l'instant.</p>`) + `</div>`;
 
+  // Deux fiches pour la même personne (« Manon » saisie deux fois) : on les réunit.
+  if (S.state.players.length >= 2) {
+    const opts = S.state.players.map((p) =>
+      `<option value="${p.id}">${esc(p.email ? `${p.name} · ${p.email}` : p.name)}</option>`).join("");
+    html += `<div class="section-label">Fusionner deux fiches</div><div class="card">
+      <label class="field" for="fuse-kept">Fiche à garder</label>
+      <select id="fuse-kept"><option value="">Choisir</option>${opts}</select>
+      <label class="field" for="fuse-dup" style="margin-top:12px">Fiche à fusionner</label>
+      <select id="fuse-dup"><option value="">Choisir</option>${opts}</select>
+      <p class="hint">Les parties et les statistiques de la seconde fiche passent sur la première, puis la seconde est supprimée.</p>
+      <button class="btn primary" data-act="fuse-players" style="margin-bottom:0">Fusionner</button></div>`;
+  }
+
   html += `<div class="section-label">Apparence</div><div class="card">
     <label class="field" for="theme-select">Thème</label>
     <select id="theme-select">
@@ -1157,6 +1179,20 @@ export function bindEvents() {
         break;
       }
       case "del-player": S.removePlayer(el.dataset.id); render(); break;
+      case "fuse-players": {
+        const kept = document.getElementById("fuse-kept").value;
+        const dup = document.getElementById("fuse-dup").value;
+        if (!kept || !dup) return toast("Choisissez les deux fiches.");
+        if (kept === dup) return toast("Choisissez deux fiches différentes.");
+        const a = S.playerById(dup)?.name, b = S.playerById(kept)?.name;
+        if (!confirm(`« ${a} » rejoint « ${b} ». Cette action ne s'annule pas.`)) return;
+        S.fusePlayers(dup, kept);
+        toast("Fiches fusionnées.");
+        render();
+        break;
+      }
+      case "import-guest": S.resolveGuestImport(true); render(); break;
+      case "skip-import": S.resolveGuestImport(false); render(); break;
 
       case "sign-apple": auth?.signInApple().catch((e) => toast(e.message)); break;
       case "sign-google": auth?.signInGoogle().catch((e) => toast(e.message)); break;

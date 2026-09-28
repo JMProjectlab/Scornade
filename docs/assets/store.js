@@ -11,9 +11,19 @@
 import { HUES } from "./data.js";
 import { isFinished, winnerIndex } from "./engine.js";
 
-const KEY_PLAYERS = "sm.players";
-const KEY_SESSIONS = "sm.sessions";
 const KEY_USER = "sm.user";
+
+// Un espace de stockage par compte, plus un sans compte (« guest »). Avant,
+// joueurs et parties vivaient sous deux clés communes : en changeant de
+// compte, ceux du compte précédent restaient et partaient sur le serveur du
+// suivant. Rien ne passe plus d'un espace à l'autre sans accord explicite.
+const GUEST = "guest";
+const LEGACY_PLAYERS = "sm.players";
+const LEGACY_SESSIONS = "sm.sessions";
+const spaceOf = (user) => (user ? user.id : GUEST);
+const keyPlayers = (space) => `sm.players.${space}`;
+const keySessions = (space) => `sm.sessions.${space}`;
+const keyDeclined = (space) => `sm.guestImport.declined.${space}`;
 const KEY_LANG = "sm.languagePreference";
 const KEY_THEME = "sm.theme";
 
@@ -21,6 +31,8 @@ export const state = {
   players: [],
   sessions: [],
   user: null,
+  /** Données sans compte proposées à l'import après une connexion. */
+  pendingImport: null,
   filter: "all",
   /** Renseigné par firebase.js quand la synchronisation est active. */
   sync: null,
@@ -51,14 +63,34 @@ function writeJSON(key, value) {
 }
 
 export function load() {
-  state.players = readJSON(KEY_PLAYERS, []);
-  state.sessions = readJSON(KEY_SESSIONS, []);
   state.user = readJSON(KEY_USER, null);
+  migrateLegacy();
+  loadSpace();
+}
+
+/** Les anciennes clés communes vont à l'espace ouvert, puis disparaissent. */
+function migrateLegacy() {
+  const space = spaceOf(state.user);
+  [[LEGACY_PLAYERS, keyPlayers(space)], [LEGACY_SESSIONS, keySessions(space)]].forEach(([old, next]) => {
+    try {
+      const raw = localStorage.getItem(old);
+      if (raw === null) return;
+      if (localStorage.getItem(next) === null) localStorage.setItem(next, raw);
+      localStorage.removeItem(old);
+    } catch { /* navigation privée */ }
+  });
+}
+
+function loadSpace() {
+  const space = spaceOf(state.user);
+  state.players = readJSON(keyPlayers(space), []);
+  state.sessions = readJSON(keySessions(space), []);
 }
 
 function persistLocal() {
-  writeJSON(KEY_PLAYERS, state.players);
-  writeJSON(KEY_SESSIONS, state.sessions);
+  const space = spaceOf(state.user);
+  writeJSON(keyPlayers(space), state.players);
+  writeJSON(keySessions(space), state.sessions);
 }
 
 /** Enregistre, pousse vers Firestore si branché, puis redessine. */
@@ -89,10 +121,62 @@ export function applyTheme() {
 // --- Compte ---------------------------------------------------------------
 
 export function setUser(user) {
+  const changed = spaceOf(user) !== spaceOf(state.user);
   state.user = user;
   if (user) writeJSON(KEY_USER, user);
   else localStorage.removeItem(KEY_USER);
+  if (changed) {
+    // Chaque compte retrouve son espace, et lui seul.
+    loadSpace();
+    state.pendingImport = null;
+    if (user) offerGuestImport();
+  }
   emit();
+}
+
+// --- Import des données sans compte --------------------------------------
+
+function offerGuestImport() {
+  const space = spaceOf(state.user);
+  if (space === GUEST || localStorage.getItem(keyDeclined(space))) return;
+  const players = readJSON(keyPlayers(GUEST), []).filter((g) => !state.players.some((p) => p.id === g.id));
+  const sessions = readJSON(keySessions(GUEST), []).filter((g) => !state.sessions.some((s) => s.id === g.id));
+  if (players.length || sessions.length) {
+    state.pendingImport = { players: players.length, sessions: sessions.length };
+  }
+}
+
+/**
+ * Accepté : joueurs et parties sans compte rejoignent le compte, puis quittent
+ * l'espace sans compte. Un joueur du même nom qu'un joueur du compte est la
+ * même personne : ses parties passent sur la fiche existante. Refusé : rien ne
+ * bouge, et la question n'est plus posée pour ce compte.
+ */
+export function resolveGuestImport(accept) {
+  state.pendingImport = null;
+  const space = spaceOf(state.user);
+  if (space === GUEST) return emit();
+  if (!accept) {
+    try { localStorage.setItem(keyDeclined(space), "1"); } catch { /* navigation privée */ }
+    return emit();
+  }
+  const same = (a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }) === 0;
+  const remap = new Map();
+  readJSON(keyPlayers(GUEST), []).forEach((g) => {
+    if (state.players.some((p) => p.id === g.id)) return;
+    const twin = state.players.find((p) => same(p.name, g.name));
+    if (twin) remap.set(g.id, twin.id);
+    else state.players.push(g);
+  });
+  readJSON(keySessions(GUEST), []).forEach((g) => {
+    if (state.sessions.some((s) => s.id === g.id)) return;
+    g.entrants.forEach((e) => { e.playerIds = e.playerIds.map((id) => remap.get(id) ?? id); });
+    state.sessions.push(g);
+  });
+  state.players.sort((a, b) => a.name.localeCompare(b.name));
+  state.sessions.sort((a, b) => (a.date < b.date ? 1 : -1));
+  [keyPlayers(GUEST), keySessions(GUEST)].forEach((k) => localStorage.removeItem(k));
+  commit();
 }
 
 export function signOut() {
@@ -107,7 +191,8 @@ export async function deleteEverything() {
   state.players = [];
   state.sessions = [];
   state.sync = null;
-  [KEY_PLAYERS, KEY_SESSIONS, KEY_USER].forEach((k) => localStorage.removeItem(k));
+  const space = spaceOf(state.user);
+  [keyPlayers(space), keySessions(space), KEY_USER].forEach((k) => localStorage.removeItem(k));
   state.user = null;
   emit();
   await sync?.deleteAll();
@@ -130,6 +215,25 @@ export function removePlayer(id) {
 }
 
 export const playerById = (id) => state.players.find((p) => p.id === id);
+
+/**
+ * Deux fiches pour la même personne n'en font plus qu'une : les parties de
+ * `duplicateId` passent sur `keptId`, puis la fiche en double disparaît. Les
+ * statistiques suivent, puisqu'elles se calculent sur les identifiants.
+ */
+export function fusePlayers(duplicateId, keptId) {
+  const dup = playerById(duplicateId);
+  const kept = playerById(keptId);
+  if (!dup || !kept || dup.id === kept.id) return;
+  state.sessions.forEach((s) => s.entrants.forEach((e) => {
+    if (!e.playerIds.includes(dup.id)) return;
+    e.playerIds = [...new Set(e.playerIds.map((id) => (id === dup.id ? kept.id : id)))];
+    if (e.name === dup.name) e.name = kept.name;
+  }));
+  if (!kept.email && dup.email) kept.email = dup.email;
+  state.players = state.players.filter((p) => p.id !== dup.id);
+  commit();
+}
 
 // --- Parties --------------------------------------------------------------
 

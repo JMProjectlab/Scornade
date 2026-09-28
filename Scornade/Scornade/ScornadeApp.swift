@@ -30,6 +30,16 @@ struct ScornadeApp: App {
                 }
             }
             .modifier(ReviewPrompt())
+            // Juste après une connexion : importer ce qui a été fait sans compte ?
+            .alert("Importer vos parties sans compte ?",
+                   isPresented: Binding(get: { store.pendingGuestImport != nil },
+                                        set: { if !$0 { store.pendingGuestImport = nil } }),
+                   presenting: store.pendingGuestImport) { _ in
+                Button("Importer") { store.resolveGuestImport(accept: true) }
+                Button("Non merci", role: .cancel) { store.resolveGuestImport(accept: false) }
+            } message: { found in
+                Text("Cet appareil garde \(found.players) joueur(s) et \(found.sessions) partie(s) créés sans compte. Les ajouter à ce compte ? Un joueur du même nom que l'un des vôtres sera considéré comme la même personne.")
+            }
             .environmentObject(store)
             .tint(Color.brand)
             // Le thème nuit et braise de l'icône vaut pour toute l'app.
