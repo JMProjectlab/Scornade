@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Pictogramme d'un jeu.
 ///
@@ -33,8 +34,20 @@ struct GameGlyph: View {
     // Échelle : tous les tracés sont pensés dans une boîte de 22 pt.
     private var u: CGFloat { size / 22 }
 
+    /// Le pictogramme par défaut : le SF Symbol déclaré au catalogue.
+    ///
+    /// Ce nom peut venir de Firestore, donc être n'importe quoi. `Image(systemName:)`
+    /// ne dessine rien du tout devant un nom inconnu — pas de point
+    /// d'interrogation, une case vide — et un jeu sans pictogramme passe pour
+    /// un défaut d'affichage. On vérifie donc que le symbole existe vraiment,
+    /// et on retombe sinon sur un dé, qui vaut pour n'importe quel jeu.
+    private static let defaultSymbol = "dice"
+
     private var fallbackSymbol: some View {
-        Image(systemName: GameCatalog.game(id: gameId)?.symbol ?? "questionmark")
+        let declared = GameCatalog.game(id: gameId)?.symbol
+        let name = declared.flatMap { UIImage(systemName: $0) != nil ? $0 : nil }
+            ?? Self.defaultSymbol
+        return Image(systemName: name)
             .font(.system(size: size * 0.86))
     }
 

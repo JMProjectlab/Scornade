@@ -669,10 +669,34 @@ function scoringYams(session) {
   return { left, right };
 }
 
+/** Le jeu d'une partie, ou un jeu générique reconstruit depuis la partie
+ *  elle-même.
+ *
+ *  Une partie peut désigner un jeu que ce client ne connaît pas : synchronisée
+ *  depuis un appareil à jour, ou créée pendant qu'un jeu du catalogue distant
+ *  était visible. La partie porte déjà tout ce qu'il faut pour la compter — nom,
+ *  objectif, sens de victoire, sens du score — et le moteur générique sait faire
+ *  le reste. Mieux vaut compter la partie que planter sur son écran. */
+function gameOfSession(session) {
+  const known = gameById(session.gameId);
+  if (known) return known;
+  return {
+    id: session.gameId,
+    name: session.gameName || "Partie",
+    cat: "societe",
+    engine: "cumul",
+    team: false,
+    target: session.target ?? 0,
+    high: session.higherWins ?? true,
+    roundLimit: session.roundLimit ?? 0,
+    rules: "",
+  };
+}
+
 function screenScoring() {
   const session = S.sessionById(view.id);
   if (!session) return `<div class="empty">Partie introuvable.</div>`;
-  const game = gameById(session.gameId);
+  const game = gameOfSession(session);
 
   let parts;
   if (game.id === "belote") parts = scoringBelote(session);
@@ -1285,7 +1309,7 @@ export function bindEvents() {
     if (el.classList.contains("entry")) {
       scratch.inputs[Number(el.dataset.i)] = el.value;
       // Papayoo affiche un compteur vivant : il faut redessiner à la frappe.
-      if (session && gameById(session.gameId).engine === "payoo") renderKeepingFocus();
+      if (session && gameOfSession(session).engine === "payoo") renderKeepingFocus();
       return;
     }
     if (el.classList.contains("b-pts")) {

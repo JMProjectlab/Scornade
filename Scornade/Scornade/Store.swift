@@ -93,6 +93,11 @@ final class Store: ObservableObject {
         // Les corrections déjà reçues s'appliquent avant le premier écran :
         // pas de libellé qui change sous les yeux une seconde plus tard.
         GameCatalog.loadCached()
+        // Le catalogue ne dépend pas du compte : il est commun à tous, et les
+        // règles Firestore le laissent lire sans authentification. L'écouter
+        // ici, et non depuis la synchronisation, est ce qui permet à un
+        // utilisateur « Continuer sans compte » de recevoir les corrections.
+        startCatalogListener()
         startSyncIfSignedIn()
     }
 
@@ -634,46 +639,60 @@ final class Store: ObservableObject {
             }
         }
 
-        // Le catalogue est commun à tous les comptes : il est en lecture seule,
-        // et c'est lui qui permet de corriger une règle sans publier une
-        // nouvelle version. Une collection vide est le cas normal.
-        catalogListener = db.collection("games").addSnapshotListener { [weak self] snap, _ in
-            guard let snap else { return }
-            let overrides = Self.decodeOverrides(snap.documents)
-            Task { @MainActor in
-                guard let self else { return }
-                GameCatalog.cache(overrides)
-                if GameCatalog.apply(overrides) { self.catalogRevision += 1 }
-            }
-        }
-
         // Ce qui existe déjà en local et pas encore côté serveur part au premier envoi.
         pushChanges()
+    }
+
+    /// Écoute les corrections du catalogue, avec ou sans compte.
+    ///
+    /// C'est en lecture seule, et la collection est la même pour tout le monde :
+    /// il n'y a donc rien à attendre d'une connexion. Une collection vide est le
+    /// cas normal, le catalogue embarqué s'applique alors tel quel.
+    private func startCatalogListener() {
+        guard FirebaseSupport.isAvailable, catalogListener == nil else { return }
+        catalogListener = db.collection("games").addSnapshotListener { [weak self] snap, _ in
+            guard let snap else { return }
+            let entries = Self.decodeCatalog(snap.documents)
+            Task { @MainActor in
+                guard let self else { return }
+                GameCatalog.cache(entries)
+                if GameCatalog.apply(entries) { self.catalogRevision += 1 }
+            }
+        }
     }
 
     /// Les documents `games/{id}` sont des dictionnaires plats, pas le JSON
     /// encapsulé qu'on utilise pour les joueurs et les parties : ils sont
     /// rédigés à la main dans la console, autant qu'ils y soient lisibles.
-    private nonisolated static func decodeOverrides(
+    ///
+    /// Rien n'est validé ici : un champ absent ou du mauvais type devient `nil`,
+    /// et c'est `GameCatalog.apply` qui décide de ce qui est acceptable.
+    private nonisolated static func decodeCatalog(
         _ docs: [QueryDocumentSnapshot]
-    ) -> [String: GameCatalog.Override] {
-        var out: [String: GameCatalog.Override] = [:]
+    ) -> [String: GameCatalog.Entry] {
+        var out: [String: GameCatalog.Entry] = [:]
         for doc in docs {
             let d = doc.data()
-            out[doc.documentID] = GameCatalog.Override(
+            out[doc.documentID] = GameCatalog.Entry(
                 name: d["name"] as? String,
                 rules: d["rules"] as? String,
                 category: d["category"] as? String,
-                defaultTarget: (d["defaultTarget"] as? NSNumber)?.intValue
+                defaultTarget: (d["defaultTarget"] as? NSNumber)?.intValue,
+                engine: d["engine"] as? String,
+                isTeamGame: d["isTeamGame"] as? Bool,
+                higherWins: d["higherWins"] as? Bool,
+                roundLimit: (d["roundLimit"] as? NSNumber)?.intValue,
+                symbol: d["symbol"] as? String
             )
         }
         return out
     }
 
+    /// Arrête la synchronisation du compte — mais pas l'écoute du catalogue,
+    /// qui ne dépend d'aucun compte et survit donc à la déconnexion.
     private func stopSync() {
         playersListener?.remove(); playersListener = nil
         sessionsListener?.remove(); sessionsListener = nil
-        catalogListener?.remove(); catalogListener = nil
     }
 
     private nonisolated static func decodeAll<T: Decodable>(_ type: T.Type,

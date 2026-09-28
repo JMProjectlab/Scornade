@@ -1,9 +1,28 @@
 import Foundation
 
+// Décodage tolérant des énumérations ci-dessous.
+//
+// Une valeur inconnue n'est pas une donnée corrompue : c'est une donnée écrite
+// par une version plus récente — un jeu venu du catalogue distant, une partie
+// synchronisée depuis un appareil déjà mis à jour. Le décodage strict de Swift
+// ferait échouer tout l'objet, et `Store.decodeAll` jetterait silencieusement
+// la partie entière : l'utilisateur verrait disparaître une ligne de son
+// historique sans rien comprendre. Chaque énumération écrit donc son propre
+// `init(from:)`, plutôt qu'un protocole partagé qui entrerait en concurrence
+// avec la conformance `Codable` synthétisée pour les énumérations à valeur brute.
+
 // How scores evolve during a game.
 enum ScoreDirection: String, Codable {
     case accumulate   // start at 0, add points, reach a target
     case countdown    // start at target, subtract, reach 0
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        // Le cumul est le sens le plus courant, et le moins trompeur : un
+        // compte à rebours pris pour un cumul affiche des totaux visiblement
+        // étranges, là où l'inverse afficherait un vainqueur faux sans le dire.
+        self = ScoreDirection(rawValue: raw) ?? .accumulate
+    }
 }
 
 // Maps to the "scoring engines" from the design. Simplified for the MVP.
@@ -15,6 +34,14 @@ enum ScoringEngine: String, Codable {
     case gridScore          // Yam's, Bowling
     case phaseRace          // Phase 10 : on marque des pénalités, mais c'est la
                             // dixième phase franchie qui gagne
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        // Le moteur générique sait compter n'importe quel jeu, faute de mieux :
+        // un écran de saisie inconnu ne s'invente pas, un champ « points de la
+        // manche » se comprend toujours.
+        self = ScoringEngine(rawValue: raw) ?? .cumulativePoints
+    }
 
     var direction: ScoreDirection {
         self == .countdown ? .countdown : .accumulate
