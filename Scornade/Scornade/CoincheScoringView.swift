@@ -60,6 +60,7 @@ struct CoincheScoringView: View {
             .padding()
         }
         .navigationTitle(session.gameName)
+        .nightBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -126,8 +127,8 @@ struct CoincheScoringView: View {
             .disabled(!canValidate)
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(.separator), lineWidth: 0.5))
+        .background(Color.cloud.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.hairline, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -169,7 +170,7 @@ struct CoincheScoringView: View {
                             .font(sym.count > 1 ? .subheadline.weight(.semibold) : .title3)
                             .foregroundStyle(sym == "♥" || sym == "♦" ? Color.danger : Color.primary)
                             .frame(maxWidth: .infinity, minHeight: 38)
-                            .background(suit == sym ? Color.brandLight : Color(.secondarySystemBackground))
+                            .background(suit == sym ? Color.brandLight : Color.cloud)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(suit == sym ? Color.brand : Color.clear, lineWidth: 2))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
@@ -282,7 +283,7 @@ struct CoincheScoringView: View {
         Button(action: action) {
             Text(LocalizedStringKey(label)).font(.subheadline).lineLimit(1)
                 .frame(maxWidth: .infinity).padding(.vertical, 8)
-                .background(selected ? Color.brandLight : Color(.secondarySystemBackground))
+                .background(selected ? Color.brandLight : Color.cloud)
                 .foregroundStyle(selected ? Color.brandDark : Color.secondary)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.brand : Color.clear, lineWidth: 1.5))
                 .clipShape(RoundedRectangle(cornerRadius: 8))

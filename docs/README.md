@@ -69,3 +69,16 @@ node --test tests/engine.test.mjs
 
 Côté iOS, la cible `ScornadeTests` couvre les mêmes règles — phases de Phase 10,
 nombre de manches des Cinq Rois, fin de partie sur objectif.
+
+## Image de partage
+
+`assets/img/partage.png` (1200×630) est l'aperçu affiché quand un lien du site
+est partagé. Pour qu'elle soit écrite en SF Pro, la regénérer sur un Mac, depuis
+la racine du dépôt :
+
+```
+swift scripts/image-de-partage.swift
+```
+
+Le script dessine l'image avec la police système du Mac et l'icône de l'app
+(`AppIcon.appiconset`). À relancer après tout changement d'icône ou de texte.

@@ -44,6 +44,7 @@ struct MolkkyScoringView: View {
             .padding()
         }
         .navigationTitle(session.gameName)
+        .nightBackground()
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -100,7 +101,7 @@ struct MolkkyScoringView: View {
                 ForEach(quick, id: \.self) { q in
                     Button { validate(session, q) } label: {
                         Text("\(q)").frame(maxWidth: .infinity).padding(.vertical, 8)
-                            .background(Color(.secondarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: 8))
+                            .background(Color.cloud).clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)
                 }
@@ -121,8 +122,8 @@ struct MolkkyScoringView: View {
             }
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(.separator), lineWidth: 0.5))
+        .background(Color.cloud.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.hairline, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 

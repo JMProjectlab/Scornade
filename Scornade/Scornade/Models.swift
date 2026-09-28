@@ -1,9 +1,28 @@
 import Foundation
 
+// Décodage tolérant des énumérations ci-dessous.
+//
+// Une valeur inconnue n'est pas une donnée corrompue : c'est une donnée écrite
+// par une version plus récente — un jeu venu du catalogue distant, une partie
+// synchronisée depuis un appareil déjà mis à jour. Le décodage strict de Swift
+// ferait échouer tout l'objet, et `Store.decodeAll` jetterait silencieusement
+// la partie entière : l'utilisateur verrait disparaître une ligne de son
+// historique sans rien comprendre. Chaque énumération écrit donc son propre
+// `init(from:)`, plutôt qu'un protocole partagé qui entrerait en concurrence
+// avec la conformance `Codable` synthétisée pour les énumérations à valeur brute.
+
 // How scores evolve during a game.
 enum ScoreDirection: String, Codable {
     case accumulate   // start at 0, add points, reach a target
     case countdown    // start at target, subtract, reach 0
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        // Le cumul est le sens le plus courant, et le moins trompeur : un
+        // compte à rebours pris pour un cumul affiche des totaux visiblement
+        // étranges, là où l'inverse afficherait un vainqueur faux sans le dire.
+        self = ScoreDirection(rawValue: raw) ?? .accumulate
+    }
 }
 
 // Maps to the "scoring engines" from the design. Simplified for the MVP.
@@ -16,6 +35,14 @@ enum ScoringEngine: String, Codable {
     case phaseRace          // Phase 10 : on marque des pénalités, mais c'est la
                             // dixième phase franchie qui gagne
 
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        // Le moteur générique sait compter n'importe quel jeu, faute de mieux :
+        // un écran de saisie inconnu ne s'invente pas, un champ « points de la
+        // manche » se comprend toujours.
+        self = ScoringEngine(rawValue: raw) ?? .cumulativePoints
+    }
+
     var direction: ScoreDirection {
         self == .countdown ? .countdown : .accumulate
     }
@@ -26,6 +53,47 @@ struct Player: Identifiable, Codable, Hashable {
     var name: String
     var colorIndex: Int
     var email: String? = nil
+    /// Identifiant du compte Scornade de cette personne, posé en scannant son
+    /// code joueur. Optionnel : les fiches déjà enregistrées se décodent sans.
+    var linkedUid: String? = nil
+}
+
+/// Ce que porte le QR code « Mon code joueur » : un lien vers le site, qui
+/// identifie un compte. Scanné depuis Scornade, il crée ou relie une fiche ;
+/// scanné avec l'appareil photo, il ouvre le site, qui propose l'App Store.
+struct PlayerInvite: Equatable {
+    var uid: String
+    var name: String
+    var email: String?
+
+    static let base = "https://jmprojectlab.fr/Scornade/"
+
+    init(uid: String, name: String, email: String?) {
+        self.uid = uid
+        self.name = name
+        self.email = email
+    }
+
+    var url: URL {
+        var c = URLComponents(string: Self.base)!
+        var items = [URLQueryItem(name: "rejoindre", value: uid), URLQueryItem(name: "n", value: name)]
+        if let email, !email.isEmpty { items.append(URLQueryItem(name: "e", value: email)) }
+        c.queryItems = items
+        return c.url!
+    }
+
+    /// Nil pour tout ce qui n'est pas un code joueur Scornade.
+    init?(string: String) {
+        guard let c = URLComponents(string: string),
+              c.host?.contains("jmprojectlab") == true,
+              let items = c.queryItems,
+              let uid = items.first(where: { $0.name == "rejoindre" })?.value, !uid.isEmpty,
+              let name = items.first(where: { $0.name == "n" })?.value, !name.isEmpty
+        else { return nil }
+        self.uid = uid
+        self.name = name
+        self.email = items.first(where: { $0.name == "e" })?.value
+    }
 }
 
 struct Game: Identifiable, Hashable {

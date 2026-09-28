@@ -52,6 +52,12 @@ export async function initFirebase() {
     // Plusieurs onglets ouverts, ou navigateur sans IndexedDB : sans gravité.
   }
 
+  // Le catalogue ne dépend pas du compte : il est commun à tous, et les règles
+  // Firestore le laissent lire sans authentification. L'écouter ici, et non
+  // depuis la branche connectée, est ce qui permet à un visiteur sans compte de
+  // recevoir les corrections.
+  watchCatalog();
+
   authMod.onAuthStateChanged(auth, (user) => {
     if (user) {
       setUser({
@@ -61,7 +67,6 @@ export async function initFirebase() {
         mode: user.providerData[0]?.providerId === "apple.com" ? "apple" : "google",
       });
       startListening(user.uid);
-      watchCatalog();
     } else {
       stopListening();
       setUser(null);
@@ -83,7 +88,9 @@ let unsubCatalog = null;
  * normal : le catalogue embarqué s'applique alors tel quel.
  *
  * Les règles Firestore interdisent l'écriture depuis le client, donc ce flux
- * est à sens unique — l'application lit, la console corrige.
+ * est à sens unique — l'application lit, la console corrige. La lecture, elle,
+ * est ouverte sans authentification : il n'y a rien à attendre d'une connexion
+ * pour une collection identique pour tout le monde.
  */
 function watchCatalog() {
   unsubCatalog?.();
@@ -144,10 +151,11 @@ function startListening(userId) {
   push(state);
 }
 
+/** Arrête la synchronisation du compte — mais pas l'écoute du catalogue, qui ne
+ *  dépend d'aucun compte et survit donc à la déconnexion. */
 function stopListening() {
   unsubPlayers?.(); unsubPlayers = null;
   unsubSessions?.(); unsubSessions = null;
-  unsubCatalog?.(); unsubCatalog = null;
 }
 
 /** N'écrit que les documents dont le JSON a changé depuis le dernier envoi. */

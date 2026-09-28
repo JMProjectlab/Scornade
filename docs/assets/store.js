@@ -11,9 +11,19 @@
 import { HUES } from "./data.js";
 import { isFinished, winnerIndex } from "./engine.js";
 
-const KEY_PLAYERS = "sm.players";
-const KEY_SESSIONS = "sm.sessions";
 const KEY_USER = "sm.user";
+
+// Un espace de stockage par compte, plus un sans compte (« guest »). Avant,
+// joueurs et parties vivaient sous deux clés communes : en changeant de
+// compte, ceux du compte précédent restaient et partaient sur le serveur du
+// suivant. Rien ne passe plus d'un espace à l'autre sans accord explicite.
+const GUEST = "guest";
+const LEGACY_PLAYERS = "sm.players";
+const LEGACY_SESSIONS = "sm.sessions";
+const spaceOf = (user) => (user ? user.id : GUEST);
+const keyPlayers = (space) => `sm.players.${space}`;
+const keySessions = (space) => `sm.sessions.${space}`;
+const keyDeclined = (space) => `sm.guestImport.declined.${space}`;
 const KEY_LANG = "sm.languagePreference";
 const KEY_THEME = "sm.theme";
 
@@ -21,6 +31,10 @@ export const state = {
   players: [],
   sessions: [],
   user: null,
+  /** Données sans compte proposées à l'import après une connexion. */
+  pendingImport: null,
+  /** Code joueur reçu par lien (QR scanné avec l'appareil photo). */
+  pendingInvite: null,
   filter: "all",
   /** Renseigné par firebase.js quand la synchronisation est active. */
   sync: null,
@@ -51,14 +65,34 @@ function writeJSON(key, value) {
 }
 
 export function load() {
-  state.players = readJSON(KEY_PLAYERS, []);
-  state.sessions = readJSON(KEY_SESSIONS, []);
   state.user = readJSON(KEY_USER, null);
+  migrateLegacy();
+  loadSpace();
+}
+
+/** Les anciennes clés communes vont à l'espace ouvert, puis disparaissent. */
+function migrateLegacy() {
+  const space = spaceOf(state.user);
+  [[LEGACY_PLAYERS, keyPlayers(space)], [LEGACY_SESSIONS, keySessions(space)]].forEach(([old, next]) => {
+    try {
+      const raw = localStorage.getItem(old);
+      if (raw === null) return;
+      if (localStorage.getItem(next) === null) localStorage.setItem(next, raw);
+      localStorage.removeItem(old);
+    } catch { /* navigation privée */ }
+  });
+}
+
+function loadSpace() {
+  const space = spaceOf(state.user);
+  state.players = readJSON(keyPlayers(space), []);
+  state.sessions = readJSON(keySessions(space), []);
 }
 
 function persistLocal() {
-  writeJSON(KEY_PLAYERS, state.players);
-  writeJSON(KEY_SESSIONS, state.sessions);
+  const space = spaceOf(state.user);
+  writeJSON(keyPlayers(space), state.players);
+  writeJSON(keySessions(space), state.sessions);
 }
 
 /** Enregistre, pousse vers Firestore si branché, puis redessine. */
@@ -72,7 +106,9 @@ export function commit() {
 
 export const getLanguage = () => localStorage.getItem(KEY_LANG) || "system";
 export const setLanguage = (v) => { localStorage.setItem(KEY_LANG, v); emit(); };
-export const getTheme = () => localStorage.getItem(KEY_THEME) || "system";
+// Le thème nuit et braise de l'icône est le défaut ; « Système » et « Clair »
+// restent proposés dans les réglages.
+export const getTheme = () => localStorage.getItem(KEY_THEME) || "dark";
 export function setTheme(v) {
   localStorage.setItem(KEY_THEME, v);
   applyTheme();
@@ -87,10 +123,62 @@ export function applyTheme() {
 // --- Compte ---------------------------------------------------------------
 
 export function setUser(user) {
+  const changed = spaceOf(user) !== spaceOf(state.user);
   state.user = user;
   if (user) writeJSON(KEY_USER, user);
   else localStorage.removeItem(KEY_USER);
+  if (changed) {
+    // Chaque compte retrouve son espace, et lui seul.
+    loadSpace();
+    state.pendingImport = null;
+    if (user) offerGuestImport();
+  }
   emit();
+}
+
+// --- Import des données sans compte --------------------------------------
+
+function offerGuestImport() {
+  const space = spaceOf(state.user);
+  if (space === GUEST || localStorage.getItem(keyDeclined(space))) return;
+  const players = readJSON(keyPlayers(GUEST), []).filter((g) => !state.players.some((p) => p.id === g.id));
+  const sessions = readJSON(keySessions(GUEST), []).filter((g) => !state.sessions.some((s) => s.id === g.id));
+  if (players.length || sessions.length) {
+    state.pendingImport = { players: players.length, sessions: sessions.length };
+  }
+}
+
+/**
+ * Accepté : joueurs et parties sans compte rejoignent le compte, puis quittent
+ * l'espace sans compte. Un joueur du même nom qu'un joueur du compte est la
+ * même personne : ses parties passent sur la fiche existante. Refusé : rien ne
+ * bouge, et la question n'est plus posée pour ce compte.
+ */
+export function resolveGuestImport(accept) {
+  state.pendingImport = null;
+  const space = spaceOf(state.user);
+  if (space === GUEST) return emit();
+  if (!accept) {
+    try { localStorage.setItem(keyDeclined(space), "1"); } catch { /* navigation privée */ }
+    return emit();
+  }
+  const same = (a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }) === 0;
+  const remap = new Map();
+  readJSON(keyPlayers(GUEST), []).forEach((g) => {
+    if (state.players.some((p) => p.id === g.id)) return;
+    const twin = state.players.find((p) => same(p.name, g.name));
+    if (twin) remap.set(g.id, twin.id);
+    else state.players.push(g);
+  });
+  readJSON(keySessions(GUEST), []).forEach((g) => {
+    if (state.sessions.some((s) => s.id === g.id)) return;
+    g.entrants.forEach((e) => { e.playerIds = e.playerIds.map((id) => remap.get(id) ?? id); });
+    state.sessions.push(g);
+  });
+  state.players.sort((a, b) => a.name.localeCompare(b.name));
+  state.sessions.sort((a, b) => (a.date < b.date ? 1 : -1));
+  [keyPlayers(GUEST), keySessions(GUEST)].forEach((k) => localStorage.removeItem(k));
+  commit();
 }
 
 export function signOut() {
@@ -105,7 +193,8 @@ export async function deleteEverything() {
   state.players = [];
   state.sessions = [];
   state.sync = null;
-  [KEY_PLAYERS, KEY_SESSIONS, KEY_USER].forEach((k) => localStorage.removeItem(k));
+  const space = spaceOf(state.user);
+  [keyPlayers(space), keySessions(space), KEY_USER].forEach((k) => localStorage.removeItem(k));
   state.user = null;
   emit();
   await sync?.deleteAll();
@@ -113,13 +202,60 @@ export async function deleteEverything() {
 
 // --- Joueurs --------------------------------------------------------------
 
-export function addPlayer(name, email = null) {
+export function addPlayer(name, email = null, linkedUid = null) {
   const used = new Set(state.players.map((p) => p.colorIndex));
   let free = 0;
   while (free < HUES.length && used.has(free)) free++;
   if (free >= HUES.length) free = state.players.length % HUES.length;
-  state.players.push({ id: uid(), name, colorIndex: free, email });
+  const player = { id: uid(), name, colorIndex: free, email };
+  if (linkedUid) player.linkedUid = linkedUid;
+  state.players.push(player);
   commit();
+  return player;
+}
+
+// --- Code joueur ----------------------------------------------------------
+//
+// Le QR code « Mon code joueur » porte un lien vers ce site :
+//   https://jmprojectlab.fr/Scornade/?rejoindre=<uid>&n=<nom>&e=<e-mail>
+// Scanné depuis l'app, il ajoute le joueur. Scanné avec l'appareil photo, il
+// ouvre ce site, qui propose d'ajouter le joueur, et l'App Store à qui n'a pas
+// l'app. Même format que PlayerInvite côté iOS.
+
+export const INVITE_BASE = "https://jmprojectlab.fr/Scornade/";
+
+export function inviteURL(user) {
+  const q = new URLSearchParams({ rejoindre: user.id, n: user.name });
+  if (user.email) q.set("e", user.email);
+  return `${INVITE_BASE}?${q}`;
+}
+
+/** Lit une invitation dans les paramètres d'une adresse ; null sinon. */
+export function parseInvite(search) {
+  const q = new URLSearchParams(search);
+  const uidParam = q.get("rejoindre");
+  const name = q.get("n");
+  if (!uidParam || !name) return null;
+  return { uid: uidParam, name, email: q.get("e") || null };
+}
+
+/** Fiche déjà reliée à ce compte, sinon même e-mail, sinon même nom. */
+export function bestMatch(invite) {
+  const free = state.players.filter((p) => !p.linkedUid);
+  return state.players.find((p) => p.linkedUid === invite.uid)
+    || (invite.email && free.find((p) => p.email?.toLowerCase() === invite.email.toLowerCase()))
+    || free.find((p) => p.name.localeCompare(invite.name, "fr", { sensitivity: "base" }) === 0)
+    || null;
+}
+
+/** Relie la fiche `existingId` au compte invité, ou crée une fiche reliée. */
+export function linkInvite(invite, existingId = null) {
+  const existing = existingId && playerById(existingId);
+  if (!existing) return addPlayer(invite.name, invite.email, invite.uid);
+  existing.linkedUid = invite.uid;
+  if (!existing.email && invite.email) existing.email = invite.email;
+  commit();
+  return existing;
 }
 
 export function removePlayer(id) {
@@ -128,6 +264,26 @@ export function removePlayer(id) {
 }
 
 export const playerById = (id) => state.players.find((p) => p.id === id);
+
+/**
+ * Deux fiches pour la même personne n'en font plus qu'une : les parties de
+ * `duplicateId` passent sur `keptId`, puis la fiche en double disparaît. Les
+ * statistiques suivent, puisqu'elles se calculent sur les identifiants.
+ */
+export function fusePlayers(duplicateId, keptId) {
+  const dup = playerById(duplicateId);
+  const kept = playerById(keptId);
+  if (!dup || !kept || dup.id === kept.id) return;
+  state.sessions.forEach((s) => s.entrants.forEach((e) => {
+    if (!e.playerIds.includes(dup.id)) return;
+    e.playerIds = [...new Set(e.playerIds.map((id) => (id === dup.id ? kept.id : id)))];
+    if (e.name === dup.name) e.name = kept.name;
+  }));
+  if (!kept.email && dup.email) kept.email = dup.email;
+  if (!kept.linkedUid && dup.linkedUid) kept.linkedUid = dup.linkedUid;
+  state.players = state.players.filter((p) => p.id !== dup.id);
+  commit();
+}
 
 // --- Parties --------------------------------------------------------------
 

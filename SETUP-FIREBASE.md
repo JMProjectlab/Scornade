@@ -123,20 +123,78 @@ Quatre champs sont acceptés, tous facultatifs — on ne met que ce qu'on corrig
 Un document `tarot` ne contenant que `rules` corrige les règles du tarot et ne
 touche à rien d'autre.
 
-> **Ce qui n'est délibérément pas modifiable à distance :** le moteur de calcul,
-> le mode équipe et le sens de victoire. Le moteur désigne une vue de saisie et
-> une fonction de calcul — c'est du code, pas une donnée. Quant au sens de
-> victoire, le vainqueur est recalculé à chaque affichage : l'inverser
+> **Ce qui n'est délibérément pas modifiable sur un jeu livré :** le moteur de
+> calcul, le mode équipe et le sens de victoire. Le moteur désigne une vue de
+> saisie et une fonction de calcul — c'est du code, pas une donnée. Quant au
+> sens de victoire, le vainqueur est recalculé à chaque affichage : l'inverser
 > réécrirait le résultat de parties déjà terminées et archivées.
 >
-> Un identifiant inconnu est ignoré, et un champ vide ou du mauvais type aussi.
-> Une faute de frappe dans la console ne peut donc pas casser l'application :
-> au pire, la correction ne s'applique pas.
+> Un champ vide, du mauvais type, ou une catégorie inconnue est ignoré. Une
+> faute de frappe dans la console ne peut donc pas casser l'application : au
+> pire, la correction ne s'applique pas.
 
 **Une collection `games` vide est le cas normal.** Tant que tu ne corriges rien,
 c'est le catalogue livré avec l'application qui sert — c'est lui qui fait foi au
 premier lancement et hors ligne. Les corrections reçues sont mises en cache
 localement, donc elles survivent à une coupure réseau.
+
+## Ajouter un jeu sans republier l'application
+
+Un document dont l'**identifiant n'est pas dans la liste ci-dessus** n'est plus
+ignoré : il ajoute un jeu. Le jeu apparaît au catalogue des deux clients au
+prochain rafraîchissement, sans passer par l'App Store.
+
+Cela ne marche que pour les jeux qui se comptent avec **un nombre par manche**.
+Les autres — belote, coinche, tarot, papayoo, yam's, fléchettes, 421, mölkky,
+phase 10 — ont un écran de saisie qui leur est propre, et un écran est du code.
+
+L'identifiant doit être un **slug** : minuscules non accentuées, chiffres et
+tirets, 40 caractères au plus. Par exemple `triominos`, `rummikub`, `yatzy`.
+
+| Champ | Type | Obligatoire | Effet |
+|---|---|---|---|
+| `name` | chaîne | **oui** | Le nom affiché. |
+| `engine` | chaîne | **oui** | `points`, `countdown` ou `rounds` — voir ci-dessous. |
+| `rules` | chaîne | non | Le texte des règles. Vide par défaut. |
+| `category` | chaîne | non | `cartes`, `societe`, `sport` ou `des`. `societe` par défaut. |
+| `defaultTarget` | nombre | non | L'objectif proposé. `0` par défaut, c'est-à-dire aucun. |
+| `higherWins` | booléen | non | `true` par défaut : le plus haut total gagne. |
+| `isTeamGame` | booléen | non | `false` par défaut. |
+| `roundLimit` | nombre | non | Nombre de manches imposé par la règle. `0` par défaut, c'est-à-dire libre. |
+| `symbol` | chaîne | non | Nom d'un SF Symbol. Un dé par défaut, et aussi si le nom n'existe pas. |
+
+Les trois moteurs :
+
+- **`points`** — on additionne un total par manche jusqu'à l'objectif. C'est le
+  cas de la grande majorité des jeux : Uno, Skyjo, Rami, Scrabble.
+- **`countdown`** — on part de l'objectif et on retranche jusqu'à zéro, comme
+  aux fléchettes.
+- **`rounds`** — on compte les manches gagnées, comme à la pétanque ou au
+  billard.
+
+Ces trois noms sont propres au document : ils ne correspondent pas mot pour mot
+aux moteurs internes, qui ne portent pas les mêmes noms dans l'app et sur le
+site. C'est voulu — un seul document, lu par les deux.
+
+Un exemple complet, document `triominos` :
+
+```
+name          (string)  Triominos
+engine        (string)  points
+category      (string)  societe
+defaultTarget (number)  400
+higherWins    (boolean) true
+rules         (string)  Des tuiles triangulaires…
+```
+
+> **Si le document est incomplet, le jeu n'apparaît pas** — plutôt que d'être
+> ajouté à moitié. Il faut un nom non vide, un moteur parmi les trois, et un
+> identifiant en forme de slug. Un moteur inconnu, ou le nom d'un moteur interne
+> comme `cumul` ou `belote`, est refusé.
+>
+> **Supprimer le document retire le jeu du catalogue.** Les parties déjà jouées
+> avec lui restent lisibles dans l'historique : l'écran de score se rabat sur un
+> comptage générique, à partir de ce que la partie a enregistré.
 
 ## 5. Capacités Xcode
 
