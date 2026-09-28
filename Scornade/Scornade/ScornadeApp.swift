@@ -5,6 +5,7 @@ import GoogleSignIn
 @main
 struct ScornadeApp: App {
     @StateObject private var store = Store()
+    @StateObject private var storeKit = StoreKitService()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("sm.languagePreference") private var languagePreference = "system"
 
@@ -41,6 +42,14 @@ struct ScornadeApp: App {
                 Text("Cet appareil garde \(found.players) joueur(s) et \(found.sessions) partie(s) créés sans compte. Les ajouter à ce compte ? Un joueur du même nom que l'un des vôtres sera considéré comme la même personne.")
             }
             .environmentObject(store)
+            .environmentObject(storeKit)
+            // Le service d'achat écrit le droit d'accès dans le store ; il ne
+            // décide de rien lui-même. On les attache ici plutôt qu'au
+            // démarrage : les deux objets existent alors pour de bon.
+            .task {
+                storeKit.attach(store)
+                await storeKit.refreshEntitlements()
+            }
             .tint(Color.brand)
             // Le thème nuit et braise de l'icône vaut pour toute l'app.
             .preferredColorScheme(.dark)
@@ -51,7 +60,12 @@ struct ScornadeApp: App {
             }
         }
         .onChange(of: scenePhase) { phase in
-            if phase == .active { store.reloadFromCloud() }
+            if phase == .active {
+                store.reloadFromCloud()
+                // Ce qu'Apple considère comme acquis fait foi : un achat fait
+                // ailleurs, ou remboursé, se reflète au retour dans l'app.
+                Task { await storeKit.refreshEntitlements() }
+            }
         }
     }
 }

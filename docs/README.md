@@ -50,6 +50,7 @@ ses propres documents.
 | `assets/engine.js` | Calculs de score — portage de `Models.swift` |
 | `assets/charts.js` | Anneau, barres et jauge — SVG écrit à la main |
 | `assets/customgames.js` | Jeux créés par l'utilisateur : mise en forme et validation |
+| `assets/entitlements.js` | Droit d'accès aux fonctionnalités payantes (lecture seule) |
 | `assets/store.js` | État, `localStorage`, fusion avec le serveur |
 | `assets/firebase.js` | Connexion et Firestore, chargés à la demande |
 | `assets/ui.js` | Rendu des écrans et interactions |
@@ -72,6 +73,13 @@ pictogramme, donc l'historique et les statistiques restent lisibles.
 document** : mêmes clés, mêmes valeurs pour `engine` et `symbol`. En renommer
 une d'un seul côté rendrait les jeux illisibles sur l'autre client.
 
+**Créer un nouveau jeu est payant ; le site ne vend pas.** L'achat se fait dans
+l'application iOS, par StoreKit — seul canal autorisé par la règle 3.1.1
+d'Apple. L'app écrit le droit d'accès sous `users/{uid}/purchases`, le site le
+lit et s'arrête là. Deux conséquences : sans compte, un achat ne peut pas
+arriver jusqu'au site ; et un jeu créé avant l'achat reste modifiable, parce
+qu'on ne reprend pas ce qui a été donné.
+
 ## Le point de vigilance
 
 `engine.js` et `Models.swift` calculent la même chose deux fois, dans deux
@@ -82,7 +90,7 @@ Les moteurs sont couverts par des tests. Côté web, ils sont versionnés dans
 `tests/engine.test.mjs` et se rejouent sans rien installer :
 
 ```
-node --test tests/engine.test.mjs tests/customgames.test.mjs
+node --test tests/engine.test.mjs tests/customgames.test.mjs tests/entitlements.test.mjs
 ```
 
 Côté iOS, la cible `ScornadeTests` couvre les mêmes règles — phases de Phase 10,

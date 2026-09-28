@@ -11,6 +11,7 @@
 import { HUES, GAMES, gameById as bundledGameById } from "./data.js";
 import { isFinished, winnerIndex } from "./engine.js";
 import { normalizeCustomGame, toGame } from "./customgames.js";
+import { ownsCreator } from "./entitlements.js";
 
 const KEY_USER = "sm.user";
 
@@ -27,6 +28,9 @@ const keySessions = (space) => `sm.sessions.${space}`;
 // Les jeux créés appartiennent à leur auteur : ils suivent l'espace, comme ses
 // joueurs et ses parties.
 const keyCustom = (space) => `sm.customGames.${space}`;
+// Les achats aussi : un achat appartient au compte qui l'a fait, et le mode
+// sans compte n'en a aucun à lire.
+const keyPurchases = (space) => `sm.purchases.${space}`;
 const keyDeclined = (space) => `sm.guestImport.declined.${space}`;
 const KEY_LANG = "sm.languagePreference";
 const KEY_THEME = "sm.theme";
@@ -36,6 +40,8 @@ export const state = {
   sessions: [],
   /** Jeux créés par l'utilisateur. Synchronisés comme les joueurs. */
   customGames: [],
+  /** Achats reconnus. **Écrits par l'app iOS, lus ici** — le site ne vend pas. */
+  purchases: [],
   user: null,
   /** Données sans compte proposées à l'import après une connexion. */
   pendingImport: null,
@@ -94,6 +100,7 @@ function loadSpace() {
   state.players = readJSON(keyPlayers(space), []);
   state.sessions = readJSON(keySessions(space), []);
   state.customGames = readJSON(keyCustom(space), []).map(normalizeCustomGame);
+  state.purchases = readJSON(keyPurchases(space), []);
 }
 
 function persistLocal() {
@@ -101,6 +108,7 @@ function persistLocal() {
   writeJSON(keyPlayers(space), state.players);
   writeJSON(keySessions(space), state.sessions);
   writeJSON(keyCustom(space), state.customGames);
+  writeJSON(keyPurchases(space), state.purchases);
 }
 
 /** Enregistre, pousse vers Firestore si branché, puis redessine. */
@@ -201,9 +209,10 @@ export async function deleteEverything() {
   state.players = [];
   state.sessions = [];
   state.customGames = [];
+  state.purchases = [];
   state.sync = null;
   const space = spaceOf(state.user);
-  [keyPlayers(space), keySessions(space), keyCustom(space), KEY_USER]
+  [keyPlayers(space), keySessions(space), keyCustom(space), keyPurchases(space), KEY_USER]
     .forEach((k) => localStorage.removeItem(k));
   state.user = null;
   emit();
@@ -288,6 +297,9 @@ export const allGames = () => [...GAMES, ...state.customGames.map(toGame)];
 export const gameById = (id) => bundledGameById(id) ?? customAsGame(id);
 
 export const customById = (id) => state.customGames.find((g) => g.id === id);
+
+/** Raccourci de lecture : le créateur de jeu est-il débloqué ? */
+export const hasCreator = () => ownsCreator(state);
 
 const customAsGame = (id) => {
   const c = customById(id);
@@ -483,7 +495,7 @@ export function deleteSession(id) {
  * ne supprime rien : elle peut simplement signifier que l'entrée locale n'a pas
  * encore été poussée.
  */
-export function mergeRemote({ players, sessions, customGames }) {
+export function mergeRemote({ players, sessions, customGames, purchases }) {
   if (players?.length) {
     const byId = new Map(state.players.map((p) => [p.id, p]));
     players.forEach((p) => byId.set(p.id, p));
@@ -498,6 +510,11 @@ export function mergeRemote({ players, sessions, customGames }) {
     const byId = new Map(state.customGames.map((g) => [g.id, g]));
     customGames.forEach((g) => byId.set(g.id, normalizeCustomGame(g)));
     state.customGames = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  if (purchases) {
+    // Les achats font foi côté serveur : ils remplacent, ils ne fusionnent pas.
+    // Un achat remboursé par Apple doit pouvoir disparaître d'ici.
+    state.purchases = purchases.filter((p) => p && typeof p.id === "string");
   }
   persistLocal();
   emit();
