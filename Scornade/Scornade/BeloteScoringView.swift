@@ -62,6 +62,7 @@ struct BeloteScoringView: View {
             .padding()
         }
         .navigationTitle(session.gameName)
+        .nightBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -160,7 +161,7 @@ struct BeloteScoringView: View {
             }
             .foregroundStyle(.primary)
             .padding(.horizontal, 14).padding(.vertical, 10)
-            .background(Color(.secondarySystemBackground))
+            .background(Color.cloud)
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
@@ -200,8 +201,8 @@ struct BeloteScoringView: View {
             .disabled(!canValidate)
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(.separator), lineWidth: 0.5))
+        .background(Color.cloud.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.hairline, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -225,7 +226,7 @@ struct BeloteScoringView: View {
                             .font(.title3)
                             .foregroundStyle(sym == "♥" || sym == "♦" ? Color.danger : Color.primary)
                             .frame(width: 44, height: 38)
-                            .background(suit == sym ? Color.brandLight : Color(.secondarySystemBackground))
+                            .background(suit == sym ? Color.brandLight : Color.cloud)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(suit == sym ? Color.brand : Color.clear, lineWidth: 2))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
@@ -267,7 +268,7 @@ struct BeloteScoringView: View {
         Button { taker = team } label: {
             Text(label).font(.subheadline.weight(.medium)).lineLimit(1)
                 .frame(maxWidth: .infinity).padding(.vertical, 9)
-                .background(taker == team ? (team == 0 ? Color.brandLight : Color.teamTwoLight) : Color(.secondarySystemBackground))
+                .background(taker == team ? (team == 0 ? Color.brandLight : Color.teamTwoLight) : Color.cloud)
                 .foregroundStyle(taker == team ? (team == 0 ? Color.brandDark : Color.teamTwoDark) : Color.secondary)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(taker == team ? Color.brand : Color.clear, lineWidth: 2))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -330,12 +331,12 @@ struct BeloteScoringView: View {
                 Spacer()
                 Text(on ? "Oui" : "Non").font(.caption2.weight(.medium))
                     .padding(.horizontal, 7).padding(.vertical, 2)
-                    .background(on ? Color.brandLight : Color(.tertiarySystemBackground))
+                    .background(on ? Color.brandLight : Color.cloudRaised)
                     .foregroundStyle(on ? Color.brandDark : Color.secondary)
                     .clipShape(Capsule())
             }
             .padding(.horizontal, 11).padding(.vertical, 9)
-            .background(Color(.secondarySystemBackground))
+            .background(Color.cloud)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(on ? Color.brand : Color.clear, lineWidth: 1.5))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .foregroundStyle(.primary)

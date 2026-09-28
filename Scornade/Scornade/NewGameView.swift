@@ -11,6 +11,7 @@ struct NewGameView: View {
     @State private var showAddField = false
     @State private var newPlayerName = ""
     @State private var showRules = false
+    @State private var showScanner = false
     @FocusState private var nameFieldFocused: Bool
     @Environment(\.locale) private var locale
 
@@ -65,6 +66,10 @@ struct NewGameView: View {
                             .foregroundStyle(Color.brand)
                     }
                 }
+                Button { showScanner = true } label: {
+                    Label("Scanner un code joueur", systemImage: "qrcode.viewfinder")
+                        .foregroundStyle(Color.brand)
+                }
             } header: {
                 Text(game.isTeamGame ? "Touchez pour assigner · re-touchez pour retirer" : "Touchez pour ajouter ou retirer")
             }
@@ -97,6 +102,16 @@ struct NewGameView: View {
             }
         }
         .navigationTitle(game.name)
+        .nightBackground()
+        // Premier lancement : aucun joueur. Le champ s'ouvre de lui-même.
+        .onAppear { if store.players.isEmpty { showAddField = true } }
+        .sheet(isPresented: $showScanner) {
+            // Le joueur scanné entre aussitôt dans la partie.
+            ScanPlayerSheet { player in
+                if (assignment[player.id] ?? 0) == 0 { cycle(player) }
+            }
+            .environmentObject(store)
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if CustomGame.isCustom(game.id) {
@@ -134,6 +149,7 @@ struct NewGameView: View {
                     .padding()
                 }
                 .navigationTitle("Règles · \(game.name)")
+                .nightBackground()
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {

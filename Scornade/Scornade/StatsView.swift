@@ -153,6 +153,7 @@ struct StatsView: View {
             }
         }
         .navigationTitle("Statistiques")
+        .nightBackground()
         .onAppear {
             if selected == nil {
                 let name = store.currentUser?.name

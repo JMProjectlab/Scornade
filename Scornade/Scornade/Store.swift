@@ -17,11 +17,45 @@ final class Store: ObservableObject {
     @Published var path = NavigationPath()
     @Published var currentUser: UserAccount?
 
-    private let playersKey = "sm.players"
-    private let sessionsKey = "sm.sessions"
-    private let customGamesKey = "sm.customGames"
-    private let purchasesKey = "sm.purchases"
     private let userKey = "sm.user"
+
+    // MARK: Espaces de stockage local
+    //
+    // Un espace par compte, plus un pour le mode sans compte. Avant, tout
+    // vivait sous deux clés communes : en changeant de compte, les joueurs et
+    // les parties du compte précédent restaient en mémoire, puis partaient
+    // sur le serveur du suivant. C'est ce qui recopiait « Manon » d'un compte
+    // Google vers un compte Apple. Désormais, rien ne passe d'un espace à
+    // l'autre sans que l'utilisateur l'ait accepté (voir `resolveGuestImport`).
+
+    private static let guestSpace = "guest"
+    private let legacyPlayersKey = "sm.players"
+    private let legacySessionsKey = "sm.sessions"
+
+    /// L'espace du compte ouvert ; nil tant que personne n'est connecté.
+    private var space: String? {
+        guard let u = currentUser else { return nil }
+        return u.isGuest ? Self.guestSpace : u.id
+    }
+    private func playersKey(_ space: String) -> String { "sm.players.\(space)" }
+    private func sessionsKey(_ space: String) -> String { "sm.sessions.\(space)" }
+    /// Les jeux créés appartiennent à leur auteur : ils suivent l'espace, comme
+    /// ses joueurs et ses parties.
+    private func customGamesKey(_ space: String) -> String { "sm.customGames.\(space)" }
+    /// Les achats aussi : un achat appartient au compte qui l'a fait, et le
+    /// mode sans compte n'en a aucun à lire.
+    private func purchasesKey(_ space: String) -> String { "sm.purchases.\(space)" }
+    private func declinedImportKey(_ space: String) -> String { "sm.guestImport.declined.\(space)" }
+
+    /// Ce qui existe en mode sans compte et manque au compte qui vient de se
+    /// connecter. Non nil : l'app demande s'il faut l'importer.
+    @Published var pendingGuestImport: GuestImport?
+
+    struct GuestImport: Identifiable {
+        let id = UUID()
+        let players: Int
+        let sessions: Int
+    }
 
     // MARK: Firestore
     //
@@ -76,25 +110,56 @@ final class Store: ObservableObject {
         // pas de libellé qui change sous les yeux une seconde plus tard.
         GameCatalog.loadCached()
         publishCustomGames()
-        if players.isEmpty {
-            players = [
-                Player(name: "Jimmy", colorIndex: 0),
-                Player(name: "Marie", colorIndex: 2),
-                Player(name: "Paul", colorIndex: 1),
-                Player(name: "Sophie", colorIndex: 3),
-            ]
-            saveLocalCacheOnly()
-        }
+        // Le catalogue ne dépend pas du compte : il est commun à tous, et les
+        // règles Firestore le laissent lire sans authentification. L'écouter
+        // ici, et non depuis la synchronisation, est ce qui permet à un
+        // utilisateur « Continuer sans compte » de recevoir les corrections.
+        startCatalogListener()
         startSyncIfSignedIn()
     }
 
     // MARK: Players
 
-    func addPlayer(name: String, email: String?) {
+    @discardableResult
+    func addPlayer(name: String, email: String?, linkedUid: String? = nil) -> Player {
         let used = Set(players.map(\.colorIndex))
         let free = (0..<Palette.pairs.count).first { !used.contains($0) } ?? players.count
-        players.append(Player(name: name, colorIndex: free, email: email))
+        let player = Player(name: name, colorIndex: free, email: email, linkedUid: linkedUid)
+        players.append(player)
         save()
+        return player
+    }
+
+    // MARK: Code joueur
+
+    /// Mon code joueur. Il faut un compte : c'est lui que le code désigne.
+    var myInvite: PlayerInvite? {
+        guard let u = currentUser, !u.isGuest, let uid else { return nil }
+        return PlayerInvite(uid: uid, name: u.name, email: u.email)
+    }
+
+    /// La fiche qui désigne probablement la personne du code scanné : déjà
+    /// reliée à son compte, sinon même e-mail, sinon même nom. Nil : aucune,
+    /// il faudra créer une fiche.
+    func bestMatch(for invite: PlayerInvite) -> Player? {
+        if let p = players.first(where: { $0.linkedUid == invite.uid }) { return p }
+        if let e = invite.email?.lowercased(),
+           let p = players.first(where: { $0.linkedUid == nil && $0.email?.lowercased() == e }) { return p }
+        return players.first {
+            $0.linkedUid == nil && $0.name.localizedCaseInsensitiveCompare(invite.name) == .orderedSame
+        }
+    }
+
+    /// Relie `existing` au compte du code scanné, ou crée une fiche reliée.
+    @discardableResult
+    func link(_ invite: PlayerInvite, to existing: Player?) -> Player {
+        guard let existing, let i = players.firstIndex(where: { $0.id == existing.id }) else {
+            return addPlayer(name: invite.name, email: invite.email, linkedUid: invite.uid)
+        }
+        players[i].linkedUid = invite.uid
+        if players[i].email == nil { players[i].email = invite.email }
+        save()
+        return players[i]
     }
 
     func removePlayer(_ player: Player) {
@@ -176,6 +241,13 @@ final class Store: ObservableObject {
             roundLimit: game.roundLimit > 0 ? game.roundLimit : nil,
             phaseRounds: game.engine == .phaseRace ? [] : nil
         )
+        var session = session
+        // Mölkky : les compteurs de ratés naissent avec la partie, comme côté
+        // web. Les créer plus tard obligerait chaque lecteur à gérer le cas nil.
+        if game.id == "molkky" {
+            session.molkkyMisses = Array(repeating: 0, count: entrants.count)
+            session.molkkyOut = Array(repeating: false, count: entrants.count)
+        }
         sessions.insert(session, at: 0)
         save()
         return session
@@ -221,6 +293,16 @@ final class Store: ObservableObject {
         let flags = (0..<n).map { completed.indices.contains($0) && completed[$0] }
         sessions[i].phaseRounds = (sessions[i].phaseRounds ?? []) + [flags]
         sessions[i].rounds.append((0..<n).map { deltas.indices.contains($0) ? deltas[$0] : 0 })
+        save()
+    }
+
+    /// Mölkky : un lancer, ses points et son compteur de ratés.
+    ///
+    /// Les deux s'écrivent ensemble ou pas du tout : une manche enregistrée
+    /// sans son raté laisserait un joueur éliminable à jamais.
+    func addMolkkyThrow(sessionID: UUID, player: Int, delta: Int, missed: Bool) {
+        guard let i = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[i].recordMolkkyThrow(player: player, delta: delta, missed: missed)
         save()
     }
 
@@ -359,6 +441,10 @@ final class Store: ObservableObject {
         // Le tableau vide dit « cette partie suit des phases » ; le mettre à nil
         // ferait retomber Phase 10 sur le décompte ordinaire.
         if s.phaseRounds != nil { s.phaseRounds = [] }
+        if s.molkkyMisses != nil {
+            s.molkkyMisses = Array(repeating: 0, count: s.entrants.count)
+            s.molkkyOut = Array(repeating: false, count: s.entrants.count)
+        }
         s.manuallyFinished = false
         sessions[i] = s
         save()
@@ -392,12 +478,18 @@ final class Store: ObservableObject {
     // MARK: Auth
 
     func signIn(id: String, name: String, email: String?, mode: AuthMode) {
+        stopSync()
         currentUser = UserAccount(id: id, name: name, email: email, mode: mode)
         saveUser()
-        if !players.contains(where: { $0.name == name }) {
-            addPlayer(name: name, email: email)
+        // L'espace de ce compte, et lui seul : rien de l'espace précédent.
+        loadSpace()
+        let myEmail = email?.lowercased()
+        let known = players.contains {
+            $0.name == name || (myEmail != nil && $0.email?.lowercased() == myEmail)
         }
+        if !known { addPlayer(name: name, email: email) }
         startSyncIfSignedIn()
+        offerGuestImport()
     }
 
     /// Ouvre une session locale, sans compte : l'application est utilisable
@@ -406,8 +498,7 @@ final class Store: ObservableObject {
     /// réseau.
     ///
     /// Les parties créées ici ne sont pas perdues si l'utilisateur se connecte
-    /// plus tard : `startSyncIfSignedIn()` termine par `pushChanges()`, qui
-    /// envoie ce qui existe déjà en local.
+    /// plus tard : la connexion propose de les importer dans le compte.
     func continueAsGuest() {
         guard currentUser == nil else { return }
         currentUser = UserAccount(id: UUID().uuidString,
@@ -415,13 +506,104 @@ final class Store: ObservableObject {
                                   email: nil,
                                   mode: .guest)
         saveUser()
+        loadSpace()
     }
 
+    /// Ferme le compte sans rien effacer : ses données restent dans son espace
+    /// sur l'appareil et reviendront à la prochaine connexion. Elles quittent
+    /// seulement la mémoire, pour que le compte suivant ne les voie pas.
     func signOut() {
         stopSync()
         try? Auth.auth().signOut()
         currentUser = nil
         UserDefaults.standard.removeObject(forKey: userKey)
+        path = NavigationPath()
+        pendingGuestImport = nil
+        loadSpace()
+    }
+
+    // MARK: Import des données sans compte
+
+    private func offerGuestImport() {
+        guard let space, space != Self.guestSpace,
+              !UserDefaults.standard.bool(forKey: declinedImportKey(space)) else { return }
+        // Les jeux créés sans compte ne sont pas proposés à l'import : ils
+        // restent dans l'espace sans compte, et y sont retrouvés en s'en
+        // déconnectant. Les faire suivre demanderait de les compter dans la
+        // proposition, donc de toucher à l'écran — à part.
+        let (guestPlayers, guestSessions, _, _) = readSpace(Self.guestSpace)
+        let newPlayers = guestPlayers.filter { g in !players.contains { $0.id == g.id } }
+        let newSessions = guestSessions.filter { g in !sessions.contains { $0.id == g.id } }
+        guard !newPlayers.isEmpty || !newSessions.isEmpty else { return }
+        pendingGuestImport = GuestImport(players: newPlayers.count, sessions: newSessions.count)
+    }
+
+    /// Accepté : les joueurs et parties sans compte rejoignent le compte, puis
+    /// quittent le mode sans compte. Un joueur qui porte le même nom qu'un
+    /// joueur du compte est la même personne : ses parties passent sur la fiche
+    /// du compte au lieu de créer un doublon. Refusé : rien ne bouge, et la
+    /// question n'est plus posée pour ce compte.
+    func resolveGuestImport(accept: Bool) {
+        pendingGuestImport = nil
+        guard let space, space != Self.guestSpace else { return }
+        guard accept else {
+            UserDefaults.standard.set(true, forKey: declinedImportKey(space))
+            return
+        }
+        let (guestPlayers, guestSessions, _, _) = readSpace(Self.guestSpace)
+
+        var remap: [UUID: UUID] = [:]
+        var merged = players
+        for g in guestPlayers where !merged.contains(where: { $0.id == g.id }) {
+            if let same = merged.first(where: { $0.name.localizedCaseInsensitiveCompare(g.name) == .orderedSame }) {
+                remap[g.id] = same.id
+            } else {
+                merged.append(g)
+            }
+        }
+        var mergedSessions = sessions
+        for var g in guestSessions where !mergedSessions.contains(where: { $0.id == g.id }) {
+            for j in g.entrants.indices {
+                g.entrants[j].playerIds = g.entrants[j].playerIds.map { remap[$0] ?? $0 }
+            }
+            mergedSessions.append(g)
+        }
+        players = merged.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+        sessions = mergedSessions.sorted { $0.date > $1.date }
+        save()
+
+        UserDefaults.standard.removeObject(forKey: playersKey(Self.guestSpace))
+        UserDefaults.standard.removeObject(forKey: sessionsKey(Self.guestSpace))
+    }
+
+    // MARK: Fusion de deux fiches
+
+    /// Deux fiches qui désignent la même personne (« Manon » saisie deux fois)
+    /// n'en font plus qu'une : les parties de `duplicate` passent sur `kept`,
+    /// puis `duplicate` est supprimée. Les statistiques suivent, puisqu'elles
+    /// se calculent sur les identifiants des joueurs de chaque partie.
+    func fusePlayer(_ duplicate: Player, into kept: Player) {
+        guard duplicate.id != kept.id else { return }
+        for i in sessions.indices {
+            for j in sessions[i].entrants.indices
+            where sessions[i].entrants[j].playerIds.contains(duplicate.id) {
+                var ids: [UUID] = []
+                for id in sessions[i].entrants[j].playerIds {
+                    let target = id == duplicate.id ? kept.id : id
+                    if !ids.contains(target) { ids.append(target) }
+                }
+                sessions[i].entrants[j].playerIds = ids
+                if sessions[i].entrants[j].name == duplicate.name {
+                    sessions[i].entrants[j].name = kept.name
+                }
+            }
+        }
+        if let k = players.firstIndex(where: { $0.id == kept.id }) {
+            if players[k].email == nil { players[k].email = duplicate.email }
+            if players[k].linkedUid == nil { players[k].linkedUid = duplicate.linkedUid }
+        }
+        players.removeAll { $0.id == duplicate.id }
+        save()
     }
 
     /// Efface toutes les données de l'utilisateur : joueurs, parties et compte,
@@ -430,6 +612,7 @@ final class Store: ObservableObject {
         let ids = (players.map(\.id.uuidString), sessions.map(\.id.uuidString),
                    customGames.map(\.id), purchases.map(\.id))
         let wasSyncing = syncEnabled
+        let spaceToErase = space
         let user = Auth.auth().currentUser
 
         stopSync()
@@ -444,7 +627,12 @@ final class Store: ObservableObject {
         pushedSessions = [:]
         pushedCustomGames = [:]
         pushedPurchases = [:]
-        for key in [playersKey, sessionsKey, customGamesKey, purchasesKey, userKey] {
+        var keys = [userKey]
+        if let erased = spaceToErase {
+            keys += [playersKey(erased), sessionsKey(erased),
+                     customGamesKey(erased), purchasesKey(erased)]
+        }
+        for key in keys {
             UserDefaults.standard.removeObject(forKey: key)
         }
 
@@ -479,43 +667,80 @@ final class Store: ObservableObject {
     }
 
     private func saveLocalCacheOnly() {
+        guard let space else { return }
         let enc = JSONEncoder()
         if let p = try? enc.encode(players) {
-            UserDefaults.standard.set(p, forKey: playersKey)
+            UserDefaults.standard.set(p, forKey: playersKey(space))
         }
         if let s = try? enc.encode(sessions) {
-            UserDefaults.standard.set(s, forKey: sessionsKey)
+            UserDefaults.standard.set(s, forKey: sessionsKey(space))
         }
         if let g = try? enc.encode(customGames) {
-            UserDefaults.standard.set(g, forKey: customGamesKey)
+            UserDefaults.standard.set(g, forKey: customGamesKey(space))
         }
         if let a = try? enc.encode(purchases) {
-            UserDefaults.standard.set(a, forKey: purchasesKey)
+            UserDefaults.standard.set(a, forKey: purchasesKey(space))
         }
     }
 
     private func load() {
-        let dec = JSONDecoder()
-        if let p = UserDefaults.standard.data(forKey: playersKey),
-           let decoded = try? dec.decode([Player].self, from: p) {
-            players = decoded
-        }
-        if let s = UserDefaults.standard.data(forKey: sessionsKey),
-           let decoded = try? dec.decode([ScoreSession].self, from: s) {
-            sessions = decoded
-        }
-        if let g = UserDefaults.standard.data(forKey: customGamesKey),
-           let decoded = try? dec.decode([CustomGame].self, from: g) {
-            customGames = decoded.map { $0.normalized() }
-        }
-        if let a = UserDefaults.standard.data(forKey: purchasesKey),
-           let decoded = try? dec.decode([Purchase].self, from: a) {
-            purchases = decoded
-        }
         if let u = UserDefaults.standard.data(forKey: userKey),
-           let decoded = try? dec.decode(UserAccount.self, from: u) {
+           let decoded = try? JSONDecoder().decode(UserAccount.self, from: u) {
             currentUser = decoded
         }
+        migrateLegacyCache()
+        loadSpace()
+    }
+
+    /// Avant la séparation par compte, tout vivait sous deux clés communes. Ce
+    /// contenu va à l'espace du compte ouvert (c'est ce qu'il affichait), ou au
+    /// mode sans compte si personne n'est connecté. Il n'est copié nulle part
+    /// ailleurs, puis les anciennes clés disparaissent.
+    private func migrateLegacyCache() {
+        let d = UserDefaults.standard
+        guard d.data(forKey: legacyPlayersKey) != nil || d.data(forKey: legacySessionsKey) != nil else { return }
+        let target = space ?? Self.guestSpace
+        for (old, new) in [(legacyPlayersKey, playersKey(target)), (legacySessionsKey, sessionsKey(target))] {
+            if let data = d.data(forKey: old), d.data(forKey: new) == nil {
+                d.set(data, forKey: new)
+            }
+            d.removeObject(forKey: old)
+        }
+    }
+
+    /// Remplace les données en mémoire par celles de l'espace courant (vide si
+    /// personne n'est connecté).
+    private func loadSpace() {
+        pushedPlayers = [:]
+        pushedSessions = [:]
+        pushedCustomGames = [:]
+        pushedPurchases = [:]
+        guard let space else {
+            players = []
+            sessions = []
+            customGames = []
+            purchases = []
+            publishCustomGames()
+            return
+        }
+        let (p, s, g, a) = readSpace(space)
+        players = p
+        sessions = s
+        customGames = g
+        purchases = a
+        publishCustomGames()
+    }
+
+    private func readSpace(_ space: String) -> ([Player], [ScoreSession], [CustomGame], [Purchase]) {
+        let d = UserDefaults.standard
+        let dec = JSONDecoder()
+        let p = d.data(forKey: playersKey(space)).flatMap { try? dec.decode([Player].self, from: $0) } ?? []
+        let s = d.data(forKey: sessionsKey(space)).flatMap { try? dec.decode([ScoreSession].self, from: $0) } ?? []
+        let g = d.data(forKey: customGamesKey(space))
+            .flatMap { try? dec.decode([CustomGame].self, from: $0) } ?? []
+        let a = d.data(forKey: purchasesKey(space))
+            .flatMap { try? dec.decode([Purchase].self, from: $0) } ?? []
+        return (p, s, g.map { $0.normalized() }, a)
     }
 
     // MARK: Synchronisation Firestore
@@ -525,10 +750,15 @@ final class Store: ObservableObject {
         guard syncEnabled, let uid else { return }
         let root = db.collection("users").document(uid)
 
+        // Un instantané parti avant un changement de compte peut arriver après :
+        // il ne s'applique que si le compte qui l'a demandé est toujours ouvert.
         playersListener = root.collection("players").addSnapshotListener { [weak self] snap, _ in
             guard let snap else { return }
             let remote = Self.decodeAll(Player.self, from: snap.documents)
-            Task { @MainActor in self?.mergePlayers(remote) }
+            Task { @MainActor in
+                guard let self, self.uid == uid else { return }
+                self.mergePlayers(remote)
+            }
         }
         sessionsListener = root.collection("sessions").addSnapshotListener { [weak self] snap, _ in
             guard let snap else { return }
@@ -545,17 +775,9 @@ final class Store: ObservableObject {
             let remote = Self.decodeAll(Purchase.self, from: snap.documents)
             Task { @MainActor in self?.mergePurchases(remote) }
         }
-
-        // Le catalogue est commun à tous les comptes : il est en lecture seule,
-        // et c'est lui qui permet de corriger une règle sans publier une
-        // nouvelle version. Une collection vide est le cas normal.
-        catalogListener = db.collection("games").addSnapshotListener { [weak self] snap, _ in
-            guard let snap else { return }
-            let overrides = Self.decodeOverrides(snap.documents)
             Task { @MainActor in
-                guard let self else { return }
-                GameCatalog.cache(overrides)
-                if GameCatalog.apply(overrides) { self.catalogRevision += 1 }
+                guard let self, self.uid == uid else { return }
+                self.mergeSessions(remote)
             }
         }
 
@@ -563,31 +785,58 @@ final class Store: ObservableObject {
         pushChanges()
     }
 
+    /// Écoute les corrections du catalogue, avec ou sans compte.
+    ///
+    /// C'est en lecture seule, et la collection est la même pour tout le monde :
+    /// il n'y a donc rien à attendre d'une connexion. Une collection vide est le
+    /// cas normal, le catalogue embarqué s'applique alors tel quel.
+    private func startCatalogListener() {
+        guard FirebaseSupport.isAvailable, catalogListener == nil else { return }
+        catalogListener = db.collection("games").addSnapshotListener { [weak self] snap, _ in
+            guard let snap else { return }
+            let entries = Self.decodeCatalog(snap.documents)
+            Task { @MainActor in
+                guard let self else { return }
+                GameCatalog.cache(entries)
+                if GameCatalog.apply(entries) { self.catalogRevision += 1 }
+            }
+        }
+    }
+
     /// Les documents `games/{id}` sont des dictionnaires plats, pas le JSON
     /// encapsulé qu'on utilise pour les joueurs et les parties : ils sont
     /// rédigés à la main dans la console, autant qu'ils y soient lisibles.
-    private nonisolated static func decodeOverrides(
+    ///
+    /// Rien n'est validé ici : un champ absent ou du mauvais type devient `nil`,
+    /// et c'est `GameCatalog.apply` qui décide de ce qui est acceptable.
+    private nonisolated static func decodeCatalog(
         _ docs: [QueryDocumentSnapshot]
-    ) -> [String: GameCatalog.Override] {
-        var out: [String: GameCatalog.Override] = [:]
+    ) -> [String: GameCatalog.Entry] {
+        var out: [String: GameCatalog.Entry] = [:]
         for doc in docs {
             let d = doc.data()
-            out[doc.documentID] = GameCatalog.Override(
+            out[doc.documentID] = GameCatalog.Entry(
                 name: d["name"] as? String,
                 rules: d["rules"] as? String,
                 category: d["category"] as? String,
-                defaultTarget: (d["defaultTarget"] as? NSNumber)?.intValue
+                defaultTarget: (d["defaultTarget"] as? NSNumber)?.intValue,
+                engine: d["engine"] as? String,
+                isTeamGame: d["isTeamGame"] as? Bool,
+                higherWins: d["higherWins"] as? Bool,
+                roundLimit: (d["roundLimit"] as? NSNumber)?.intValue,
+                symbol: d["symbol"] as? String
             )
         }
         return out
     }
 
+    /// Arrête la synchronisation du compte — mais pas l'écoute du catalogue,
+    /// qui ne dépend d'aucun compte et survit donc à la déconnexion.
     private func stopSync() {
         playersListener?.remove(); playersListener = nil
         sessionsListener?.remove(); sessionsListener = nil
         customGamesListener?.remove(); customGamesListener = nil
         purchasesListener?.remove(); purchasesListener = nil
-        catalogListener?.remove(); catalogListener = nil
     }
 
     private nonisolated static func decodeAll<T: Decodable>(_ type: T.Type,

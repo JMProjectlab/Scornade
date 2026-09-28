@@ -168,6 +168,35 @@ export function molkkyThrow(session, playerIndex, score) {
   return { delta: score, note: null, advance: next !== 50 };
 }
 
+/**
+ * Enregistre le raté d'un lancer et élimine au troisième d'affilée.
+ *
+ * Les tableaux sont créés au besoin : une partie venue de l'app iOS, ou
+ * enregistrée avant que ces compteurs existent, n'en a pas — et écrire dans un
+ * tableau absent faisait planter l'écran au premier raté.
+ *
+ * Renvoie true si ce lancer vient d'éliminer le joueur. Même règle que
+ * `ScoreSession.recordMolkkyThrow` côté Swift.
+ */
+export function molkkyMiss(session, player, missed) {
+  const n = session.entrants.length;
+  if (!Array.isArray(session.molkkyMisses) || session.molkkyMisses.length !== n) {
+    session.molkkyMisses = Array.from({ length: n }, () => 0);
+  }
+  if (!Array.isArray(session.molkkyOut) || session.molkkyOut.length !== n) {
+    session.molkkyOut = Array.from({ length: n }, () => false);
+  }
+  if (player < 0 || player >= n) return false;
+
+  if (!missed) { session.molkkyMisses[player] = 0; return false; }
+  session.molkkyMisses[player] += 1;
+  if (session.molkkyMisses[player] >= 3 && !session.molkkyOut[player]) {
+    session.molkkyOut[player] = true;
+    return true;
+  }
+  return false;
+}
+
 // --- Phase 10 -------------------------------------------------------------
 
 export const PHASE10_PHASES = [

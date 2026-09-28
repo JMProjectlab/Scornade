@@ -114,7 +114,11 @@ test("le pictogramme d'un jeu personnalisé vient de son symbole", () => {
   const svg = glyph("custom-1234", 22, "trophy");
   assert.match(svg, /<svg/);
   assert.notEqual(svg, glyph("custom-1234", 22, "dice"));
-  assert.match(glyph("custom-1234", 22), /<svg[^>]*><\/svg>/, "sans symbole, un cadre vide");
+  // Sans symbole, c'est le pictogramme par défaut qui sert — un dé, depuis que
+  // le cadre vide passait pour un défaut d'affichage.
+  assert.doesNotMatch(glyph("custom-1234", 22), /<svg[^>]*><\/svg>/);
+  assert.equal(glyph("custom-1234", 22), glyph("jeu-inconnu", 22),
+    "un jeu personnalisé sans symbole retombe sur le même défaut qu'un jeu inconnu");
 });
 
 // --- branchement dans le store -------------------------------------------

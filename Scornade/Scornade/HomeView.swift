@@ -51,6 +51,7 @@ struct HomeView: View {
                 .padding()
             }
             .navigationTitle("Scornade")
+            .nightBackground()
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink { StatsView() } label: { Image(systemName: "chart.bar") }
@@ -136,7 +137,7 @@ struct GameCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
+        .background(Color.cloud)
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
@@ -174,7 +175,7 @@ struct FilterPill: View {
         Button(action: action) {
             Text(LocalizedStringKey(label)).font(.subheadline)
                 .padding(.horizontal, 14).padding(.vertical, 7)
-                .background(selected ? Color.brandLight : Color(.secondarySystemBackground))
+                .background(selected ? Color.brandLight : Color.cloud)
                 .foregroundStyle(selected ? Color.brandDark : Color.secondary)
                 .clipShape(Capsule())
         }

@@ -165,6 +165,65 @@ final class ScornadeTests: XCTestCase {
         XCTAssertNil(uno.winnerIndex)
     }
 
+    // MARK: Mölkky — les ratés appartiennent à la partie, pas à l'écran
+
+    private func molkkySession() -> ScoreSession {
+        var s = ScoreSession(gameId: "molkky", gameName: "Mölkky", symbol: "",
+                             target: 50, higherWins: true, direction: .accumulate,
+                             entrants: entrants("A", "B", "C"))
+        s.molkkyMisses = [0, 0, 0]
+        s.molkkyOut = [false, false, false]
+        return s
+    }
+
+    func testThreeMissesInARowEliminate() {
+        var s = molkkySession()
+        for _ in 0..<2 { s.recordMolkkyThrow(player: 0, delta: 0, missed: true) }
+        XCTAssertFalse(s.isOut(0), "Deux ratés ne suffisent pas")
+        s.recordMolkkyThrow(player: 0, delta: 0, missed: true)
+        XCTAssertTrue(s.isOut(0))
+        XCTAssertFalse(s.isOut(1), "L'élimination ne touche que le joueur qui a raté")
+    }
+
+    func testASuccessfulThrowClearsTheStreak() {
+        var s = molkkySession()
+        s.recordMolkkyThrow(player: 0, delta: 0, missed: true)
+        s.recordMolkkyThrow(player: 0, delta: 0, missed: true)
+        s.recordMolkkyThrow(player: 0, delta: 7, missed: false)
+        s.recordMolkkyThrow(player: 0, delta: 0, missed: true)
+        XCTAssertFalse(s.isOut(0), "Le compteur repart de zéro après un lancer réussi")
+        XCTAssertEqual(s.total(0), 7)
+    }
+
+    /// Le vrai défaut corrigé : ces compteurs vivaient dans l'écran. Quitter la
+    /// vue ressuscitait un joueur éliminé. Ils voyagent maintenant avec la
+    /// partie — donc aussi vers l'autre appareil et vers le site.
+    func testEliminationsSurviveSerialisation() throws {
+        var s = molkkySession()
+        for _ in 0..<3 { s.recordMolkkyThrow(player: 1, delta: 0, missed: true) }
+        let data = try JSONEncoder().encode(s)
+        let back = try JSONDecoder().decode(ScoreSession.self, from: data)
+        XCTAssertTrue(back.isOut(1))
+        XCTAssertEqual(back.molkkyMisses, [0, 3, 0])
+
+        // Les clés sont celles que le site écrit déjà : c'est le même document.
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertTrue(json.contains("molkkyMisses"))
+        XCTAssertTrue(json.contains("molkkyOut"))
+    }
+
+    /// Une partie enregistrée avant ce correctif n'a pas ces tableaux : elle
+    /// doit continuer de se jouer, pas planter.
+    func testOlderSessionsWithoutCountersStillWork() {
+        var s = ScoreSession(gameId: "molkky", gameName: "Mölkky", symbol: "",
+                             target: 50, higherWins: true, direction: .accumulate,
+                             entrants: entrants("A", "B", "C"))
+        XCTAssertFalse(s.isOut(0))
+        s.recordMolkkyThrow(player: 2, delta: 0, missed: true)
+        XCTAssertEqual(s.molkkyMisses, [0, 0, 1])
+        XCTAssertFalse(s.isOut(2))
+    }
+
     func testCatalogCarriesTheThreeNewGames() {
         for id in ["dekal", "phase10", "cinqrois"] {
             let game = GameCatalog.game(id: id)

@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 import GoogleSignIn
 
 @main
@@ -29,6 +30,17 @@ struct ScornadeApp: App {
                     HomeView()
                 }
             }
+            .modifier(ReviewPrompt())
+            // Juste après une connexion : importer ce qui a été fait sans compte ?
+            .alert("Importer vos parties sans compte ?",
+                   isPresented: Binding(get: { store.pendingGuestImport != nil },
+                                        set: { if !$0 { store.pendingGuestImport = nil } }),
+                   presenting: store.pendingGuestImport) { _ in
+                Button("Importer") { store.resolveGuestImport(accept: true) }
+                Button("Non merci", role: .cancel) { store.resolveGuestImport(accept: false) }
+            } message: { found in
+                Text("Cet appareil garde \(found.players) joueur(s) et \(found.sessions) partie(s) créés sans compte. Les ajouter à ce compte ? Un joueur du même nom que l'un des vôtres sera considéré comme la même personne.")
+            }
             .environmentObject(store)
             .environmentObject(storeKit)
             // Le service d'achat écrit le droit d'accès dans le store ; il ne
@@ -39,6 +51,8 @@ struct ScornadeApp: App {
                 await storeKit.refreshEntitlements()
             }
             .tint(Color.brand)
+            // Le thème nuit et braise de l'icône vaut pour toute l'app.
+            .preferredColorScheme(.dark)
             .environment(\.locale, localeOverride ?? Locale.autoupdatingCurrent)
             .onOpenURL { url in
                 // Retour de la feuille de connexion Google.
@@ -53,5 +67,45 @@ struct ScornadeApp: App {
                 Task { await storeKit.refreshEntitlements() }
             }
         }
+    }
+}
+
+// MARK: - Demande d'avis
+
+/// Demande un avis App Store juste après une partie terminée — le moment où
+/// l'app vient de rendre service —, jamais au lancement. Une seule demande par
+/// version, et à partir de la deuxième partie terminée, pour ne pas solliciter
+/// quelqu'un qui découvre l'app. iOS plafonne de toute façon l'affichage à
+/// trois fois par an et peut ne rien montrer.
+private struct ReviewPrompt: ViewModifier {
+    @EnvironmentObject private var store: Store
+    @Environment(\.requestReview) private var requestReview
+    /// Parties terminées déjà vues. -1 : premier lancement, rien de mesuré.
+    @AppStorage("sm.review.finishedSeen") private var finishedSeen = -1
+    @AppStorage("sm.review.askedVersion") private var askedVersion = ""
+
+    private var finishedCount: Int { store.sessions.filter(\.isFinished).count }
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                // Les parties déjà terminées avant cette version ne déclenchent rien.
+                if finishedSeen < 0 { finishedSeen = finishedCount }
+            }
+            .onChange(of: finishedCount) { count in
+                let isNewFinish = count > finishedSeen
+                finishedSeen = max(finishedSeen, count)
+                guard isNewFinish, count >= 2, askedVersion != appVersion else { return }
+                askedVersion = appVersion
+                Task { @MainActor in
+                    // Laisser le temps d'afficher le vainqueur avant la demande.
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    requestReview()
+                }
+            }
     }
 }
