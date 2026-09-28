@@ -49,10 +49,28 @@ ses propres documents.
 | `assets/data.js` | Les 23 jeux, leurs règles et leurs pictogrammes |
 | `assets/engine.js` | Calculs de score — portage de `Models.swift` |
 | `assets/charts.js` | Anneau, barres et jauge — SVG écrit à la main |
+| `assets/customgames.js` | Jeux créés par l'utilisateur : mise en forme et validation |
 | `assets/store.js` | État, `localStorage`, fusion avec le serveur |
 | `assets/firebase.js` | Connexion et Firestore, chargés à la demande |
 | `assets/ui.js` | Rendu des écrans et interactions |
 | `assets/app.css` | Charte JMprojectlab, clair et sombre |
+
+## Créer son propre jeu
+
+L'écran « Créer un jeu » ne fabrique pas de moteur : il en **choisit** un parmi
+ceux que l'application sait déjà tenir — points cumulés, compte à rebours,
+manches gagnées — et lui donne un nom, un objectif et un sens de victoire. Un
+moteur, c'est du code ; ce qui se décrit dans un formulaire, ce sont des
+réglages.
+
+Les jeux créés portent un identifiant préfixé `custom-`, sont rangés après le
+catalogue livré et se synchronisent comme les joueurs. Supprimer un jeu ne
+supprime pas les parties jouées avec lui : chaque partie garde son nom et son
+pictogramme, donc l'historique et les statistiques restent lisibles.
+
+`customgames.js` et `CustomGame` (dans `Models.swift`) écrivent le **même
+document** : mêmes clés, mêmes valeurs pour `engine` et `symbol`. En renommer
+une d'un seul côté rendrait les jeux illisibles sur l'autre client.
 
 ## Le point de vigilance
 
@@ -64,7 +82,7 @@ Les moteurs sont couverts par des tests. Côté web, ils sont versionnés dans
 `tests/engine.test.mjs` et se rejouent sans rien installer :
 
 ```
-node --test tests/engine.test.mjs
+node --test tests/engine.test.mjs tests/customgames.test.mjs
 ```
 
 Côté iOS, la cible `ScornadeTests` couvre les mêmes règles — phases de Phase 10,

@@ -8,6 +8,9 @@ import FirebaseFirestore
 final class Store: ObservableObject {
     @Published var players: [Player] = []
     @Published var sessions: [ScoreSession] = []
+    /// Les jeux créés par l'utilisateur. Ils lui appartiennent et le suivent
+    /// d'un appareil à l'autre, comme ses joueurs.
+    @Published var customGames: [CustomGame] = []
     @Published var path = NavigationPath()
     @Published var currentUser: UserAccount?
 
@@ -33,6 +36,9 @@ final class Store: ObservableObject {
     }
     private func playersKey(_ space: String) -> String { "sm.players.\(space)" }
     private func sessionsKey(_ space: String) -> String { "sm.sessions.\(space)" }
+    /// Les jeux créés appartiennent à leur auteur : ils suivent l'espace, comme
+    /// ses joueurs et ses parties.
+    private func customGamesKey(_ space: String) -> String { "sm.customGames.\(space)" }
     private func declinedImportKey(_ space: String) -> String { "sm.guestImport.declined.\(space)" }
 
     /// Ce qui existe en mode sans compte et manque au compte qui vient de se
@@ -66,6 +72,7 @@ final class Store: ObservableObject {
     private lazy var db = Firestore.firestore()
     private var playersListener: ListenerRegistration?
     private var sessionsListener: ListenerRegistration?
+    private var customGamesListener: ListenerRegistration?
     private var catalogListener: ListenerRegistration?
 
     /// Change de valeur quand le catalogue est corrigé depuis Firestore.
@@ -79,6 +86,7 @@ final class Store: ObservableObject {
     /// ce qui a changé plutôt que la collection entière à chaque sauvegarde.
     private var pushedPlayers: [String: String] = [:]
     private var pushedSessions: [String: String] = [:]
+    private var pushedCustomGames: [String: String] = [:]
 
     /// La connexion est obligatoire : sans compte Firebase authentifié, il n'y a
     /// rien à synchroniser. Le cache local sert alors de secours hors-ligne.
@@ -93,6 +101,7 @@ final class Store: ObservableObject {
         // Les corrections déjà reçues s'appliquent avant le premier écran :
         // pas de libellé qui change sous les yeux une seconde plus tard.
         GameCatalog.loadCached()
+        publishCustomGames()
         // Le catalogue ne dépend pas du compte : il est commun à tous, et les
         // règles Firestore le laissent lire sans authentification. L'écouter
         // ici, et non depuis la synchronisation, est ce qui permet à un
@@ -148,6 +157,39 @@ final class Store: ObservableObject {
     func removePlayer(_ player: Player) {
         players.removeAll { $0.id == player.id }
         save()
+    }
+
+    // MARK: Jeux personnalisés
+
+    /// Crée ou met à jour un jeu, et renvoie ce qui a réellement été enregistré.
+    @discardableResult
+    func saveCustomGame(_ game: CustomGame) -> CustomGame {
+        let clean = game.normalized()
+        if let i = customGames.firstIndex(where: { $0.id == clean.id }) {
+            customGames[i] = clean
+        } else {
+            customGames.append(clean)
+        }
+        publishCustomGames()
+        save()
+        return clean
+    }
+
+    /// Supprime un jeu personnalisé. Les parties déjà jouées avec lui restent :
+    /// elles portent leur propre nom et leur propre symbole, et l'historique
+    /// comme les statistiques continuent de les afficher.
+    func deleteCustomGame(id: String) {
+        customGames.removeAll { $0.id == id }
+        publishCustomGames()
+        save()
+    }
+
+    func customGame(id: String) -> CustomGame? { customGames.first { $0.id == id } }
+
+    /// Recopie les jeux de l'utilisateur dans le catalogue et fait redessiner.
+    private func publishCustomGames() {
+        GameCatalog.setCustom(customGames.map(\.game))
+        catalogRevision += 1
     }
 
     // MARK: Sessions
@@ -451,7 +493,11 @@ final class Store: ObservableObject {
     private func offerGuestImport() {
         guard let space, space != Self.guestSpace,
               !UserDefaults.standard.bool(forKey: declinedImportKey(space)) else { return }
-        let (guestPlayers, guestSessions) = readSpace(Self.guestSpace)
+        // Les jeux créés sans compte ne sont pas proposés à l'import : ils
+        // restent dans l'espace sans compte, et y sont retrouvés en s'en
+        // déconnectant. Les faire suivre demanderait de les compter dans la
+        // proposition, donc de toucher à l'écran — à part.
+        let (guestPlayers, guestSessions, _) = readSpace(Self.guestSpace)
         let newPlayers = guestPlayers.filter { g in !players.contains { $0.id == g.id } }
         let newSessions = guestSessions.filter { g in !sessions.contains { $0.id == g.id } }
         guard !newPlayers.isEmpty || !newSessions.isEmpty else { return }
@@ -470,7 +516,7 @@ final class Store: ObservableObject {
             UserDefaults.standard.set(true, forKey: declinedImportKey(space))
             return
         }
-        let (guestPlayers, guestSessions) = readSpace(Self.guestSpace)
+        let (guestPlayers, guestSessions, _) = readSpace(Self.guestSpace)
 
         var remap: [UUID: UUID] = [:]
         var merged = players
@@ -529,7 +575,8 @@ final class Store: ObservableObject {
     /// Efface toutes les données de l'utilisateur : joueurs, parties et compte,
     /// en local ET côté serveur. Action irréversible (exigée par Apple).
     func deleteAllData() {
-        let ids = (players.map(\.id.uuidString), sessions.map(\.id.uuidString))
+        let ids = (players.map(\.id.uuidString), sessions.map(\.id.uuidString),
+                   customGames.map(\.id))
         let wasSyncing = syncEnabled
         let spaceToErase = space
         let user = Auth.auth().currentUser
@@ -537,12 +584,17 @@ final class Store: ObservableObject {
         stopSync()
         players = []
         sessions = []
+        customGames = []
+        publishCustomGames()
         currentUser = nil
         path = NavigationPath()
         pushedPlayers = [:]
         pushedSessions = [:]
+        pushedCustomGames = [:]
         var keys = [userKey]
-        if let erased = spaceToErase { keys += [playersKey(erased), sessionsKey(erased)] }
+        if let erased = spaceToErase {
+            keys += [playersKey(erased), sessionsKey(erased), customGamesKey(erased)]
+        }
         for key in keys {
             UserDefaults.standard.removeObject(forKey: key)
         }
@@ -553,6 +605,7 @@ final class Store: ObservableObject {
             let batch = db.batch()
             for id in ids.0 { batch.deleteDocument(root.collection("players").document(id)) }
             for id in ids.1 { batch.deleteDocument(root.collection("sessions").document(id)) }
+            for id in ids.2 { batch.deleteDocument(root.collection("customGames").document(id)) }
             try? await batch.commit()
             // Le compte lui-même part avec les données : c'est ce qu'exige la
             // règle 5.1.1(v) d'Apple sur la suppression de compte depuis l'app.
@@ -583,6 +636,9 @@ final class Store: ObservableObject {
         }
         if let s = try? enc.encode(sessions) {
             UserDefaults.standard.set(s, forKey: sessionsKey(space))
+        }
+        if let g = try? enc.encode(customGames) {
+            UserDefaults.standard.set(g, forKey: customGamesKey(space))
         }
     }
 
@@ -616,22 +672,29 @@ final class Store: ObservableObject {
     private func loadSpace() {
         pushedPlayers = [:]
         pushedSessions = [:]
+        pushedCustomGames = [:]
         guard let space else {
             players = []
             sessions = []
+            customGames = []
+            publishCustomGames()
             return
         }
-        let (p, s) = readSpace(space)
+        let (p, s, g) = readSpace(space)
         players = p
         sessions = s
+        customGames = g
+        publishCustomGames()
     }
 
-    private func readSpace(_ space: String) -> ([Player], [ScoreSession]) {
+    private func readSpace(_ space: String) -> ([Player], [ScoreSession], [CustomGame]) {
         let d = UserDefaults.standard
         let dec = JSONDecoder()
         let p = d.data(forKey: playersKey(space)).flatMap { try? dec.decode([Player].self, from: $0) } ?? []
         let s = d.data(forKey: sessionsKey(space)).flatMap { try? dec.decode([ScoreSession].self, from: $0) } ?? []
-        return (p, s)
+        let g = d.data(forKey: customGamesKey(space))
+            .flatMap { try? dec.decode([CustomGame].self, from: $0) } ?? []
+        return (p, s, g.map { $0.normalized() })
     }
 
     // MARK: Synchronisation Firestore
@@ -654,6 +717,13 @@ final class Store: ObservableObject {
         sessionsListener = root.collection("sessions").addSnapshotListener { [weak self] snap, _ in
             guard let snap else { return }
             let remote = Self.decodeAll(ScoreSession.self, from: snap.documents)
+            Task { @MainActor in self?.mergeSessions(remote) }
+        }
+        customGamesListener = root.collection("customGames").addSnapshotListener { [weak self] snap, _ in
+            guard let snap else { return }
+            let remote = Self.decodeAll(CustomGame.self, from: snap.documents)
+            Task { @MainActor in self?.mergeCustomGames(remote) }
+        }
             Task { @MainActor in
                 guard let self, self.uid == uid else { return }
                 self.mergeSessions(remote)
@@ -714,6 +784,7 @@ final class Store: ObservableObject {
     private func stopSync() {
         playersListener?.remove(); playersListener = nil
         sessionsListener?.remove(); sessionsListener = nil
+        customGamesListener?.remove(); customGamesListener = nil
     }
 
     private nonisolated static func decodeAll<T: Decodable>(_ type: T.Type,
@@ -736,12 +807,13 @@ final class Store: ObservableObject {
         let batch = db.batch()
         var writes = 0
 
-        func stage<T: Encodable & Identifiable>(_ items: [T],
-                                                into collection: String,
-                                                cache: inout [String: String]) where T.ID == UUID {
-            let current = Set(items.map(\.id.uuidString))
+        func stage<T: Encodable>(_ items: [T],
+                                 into collection: String,
+                                 id: (T) -> String,
+                                 cache: inout [String: String]) {
+            let current = Set(items.map(id))
             for item in items {
-                let key = item.id.uuidString
+                let key = id(item)
                 guard let data = try? enc.encode(item),
                       let json = String(data: data, encoding: .utf8),
                       cache[key] != json else { continue }
@@ -761,8 +833,9 @@ final class Store: ObservableObject {
             }
         }
 
-        stage(players, into: "players", cache: &pushedPlayers)
-        stage(sessions, into: "sessions", cache: &pushedSessions)
+        stage(players, into: "players", id: { $0.id.uuidString }, cache: &pushedPlayers)
+        stage(sessions, into: "sessions", id: { $0.id.uuidString }, cache: &pushedSessions)
+        stage(customGames, into: "customGames", id: { $0.id }, cache: &pushedCustomGames)
 
         guard writes > 0 else { return }
         batch.commit { _ in /* Firestore rejoue l'écriture au retour du réseau. */ }
@@ -775,6 +848,16 @@ final class Store: ObservableObject {
         var byID = Dictionary(uniqueKeysWithValues: players.map { ($0.id, $0) })
         for p in remote { byID[p.id] = p }
         players = Array(byID.values).sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+        saveLocalCacheOnly()
+    }
+
+    private func mergeCustomGames(_ remote: [CustomGame]) {
+        guard !remote.isEmpty else { return }
+        var byID = Dictionary(uniqueKeysWithValues: customGames.map { ($0.id, $0) })
+        for g in remote { byID[g.id] = g.normalized() }
+        customGames = Array(byID.values)
+            .sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+        publishCustomGames()
         saveLocalCacheOnly()
     }
 

@@ -78,17 +78,33 @@ enum GameCatalog {
 
     static func game(id: String) -> Game? { all.first { $0.id == id } }
 
+    /// « Perso » figure ici, mais l'accueil ne l'affiche qu'une fois un jeu
+    /// créé : une catégorie toujours vide n'apprend rien à personne.
     static let categories: [(key: String, label: String)] = [
         ("all", "Tous"), ("cartes", "Cartes"),
         ("societe", "Société"), ("sport", "Sport"),
-        ("des", "Dés"),
+        ("des", "Dés"), ("perso", "Perso"),
     ]
+
+    // MARK: Jeux personnalisés
+
+    /// Les jeux créés par l'utilisateur, tenus à jour par le `Store`.
+    ///
+    /// Ils viennent après le catalogue livré : celui-ci ne change pas de place
+    /// sous les yeux de l'utilisateur parce qu'il a inventé un jeu.
+    private(set) static var custom: [Game] = []
+
+    static func setCustom(_ games: [Game]) { custom = games }
 
     // MARK: Catalogue venu de Firestore
 
-    /// Le catalogue effectif : celui embarqué, corrigé et complété par ce que
-    /// dit la collection `games` de Firestore.
-    private(set) static var all: [Game] = bundled
+    /// Le catalogue commun : celui embarqué, corrigé et complété par ce que dit
+    /// la collection `games` de Firestore.
+    private(set) static var shared: [Game] = bundled
+
+    /// Le catalogue effectif : le catalogue commun, puis les jeux de
+    /// l'utilisateur.
+    static var all: [Game] { shared + custom }
 
     private static let cacheKey = "sm.catalog"
 
@@ -152,11 +168,13 @@ enum GameCatalog {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         next.append(contentsOf: added)
 
-        // Comparer le catalogue entier, plutôt que de suivre chaque champ :
-        // c'est ce qui fait qu'un document supprimé dans la console rend bien
-        // au jeu sa valeur livrée, et qu'un jeu ajouté puis retiré disparaît.
-        guard next != all else { return false }
-        all = next
+        // Comparer le catalogue commun entier, plutôt que de suivre chaque
+        // champ : c'est ce qui fait qu'un document supprimé dans la console rend
+        // bien au jeu sa valeur livrée, et qu'un jeu ajouté puis retiré
+        // disparaît. Les jeux personnalisés ne sont pas dans la comparaison :
+        // ils ne viennent pas de Firestore et ne bougent pas d'ici.
+        guard next != shared else { return false }
+        shared = next
         return true
     }
 
