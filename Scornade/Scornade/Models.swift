@@ -26,6 +26,47 @@ struct Player: Identifiable, Codable, Hashable {
     var name: String
     var colorIndex: Int
     var email: String? = nil
+    /// Identifiant du compte Scornade de cette personne, posé en scannant son
+    /// code joueur. Optionnel : les fiches déjà enregistrées se décodent sans.
+    var linkedUid: String? = nil
+}
+
+/// Ce que porte le QR code « Mon code joueur » : un lien vers le site, qui
+/// identifie un compte. Scanné depuis Scornade, il crée ou relie une fiche ;
+/// scanné avec l'appareil photo, il ouvre le site, qui propose l'App Store.
+struct PlayerInvite: Equatable {
+    var uid: String
+    var name: String
+    var email: String?
+
+    static let base = "https://jmprojectlab.fr/Scornade/"
+
+    init(uid: String, name: String, email: String?) {
+        self.uid = uid
+        self.name = name
+        self.email = email
+    }
+
+    var url: URL {
+        var c = URLComponents(string: Self.base)!
+        var items = [URLQueryItem(name: "rejoindre", value: uid), URLQueryItem(name: "n", value: name)]
+        if let email, !email.isEmpty { items.append(URLQueryItem(name: "e", value: email)) }
+        c.queryItems = items
+        return c.url!
+    }
+
+    /// Nil pour tout ce qui n'est pas un code joueur Scornade.
+    init?(string: String) {
+        guard let c = URLComponents(string: string),
+              c.host?.contains("jmprojectlab") == true,
+              let items = c.queryItems,
+              let uid = items.first(where: { $0.name == "rejoindre" })?.value, !uid.isEmpty,
+              let name = items.first(where: { $0.name == "n" })?.value, !name.isEmpty
+        else { return nil }
+        self.uid = uid
+        self.name = name
+        self.email = items.first(where: { $0.name == "e" })?.value
+    }
 }
 
 struct Game: Identifiable, Hashable {

@@ -43,13 +43,22 @@
 </noscript>
 
 <script type="module">
-  import { applyTheme, load, onChange, state } from "./assets/store.js";
+  import { applyTheme, load, onChange, parseInvite, state } from "./assets/store.js";
   import { bindEvents, render, setAuth } from "./assets/ui.js";
   import { initFirebase } from "./assets/firebase.js";
   import { loadCachedCatalog } from "./assets/data.js";
 
   applyTheme();
   load();
+  // Code joueur reçu par lien : gardé le temps d'une éventuelle connexion,
+  // puis retiré de l'adresse pour qu'un rechargement ne le repropose pas.
+  const invite = parseInvite(location.search)
+    || JSON.parse(sessionStorage.getItem("sm.invite") || "null");
+  if (invite) {
+    sessionStorage.setItem("sm.invite", JSON.stringify(invite));
+    history.replaceState(null, "", location.pathname);
+    if (invite.uid !== state.user?.id) state.pendingInvite = invite;
+  }
   // Les corrections du catalogue déjà reçues s'appliquent avant le premier
   // rendu : pas de libellé qui change sous les yeux une seconde plus tard.
   loadCachedCatalog();

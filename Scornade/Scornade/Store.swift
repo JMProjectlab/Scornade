@@ -98,11 +98,46 @@ final class Store: ObservableObject {
 
     // MARK: Players
 
-    func addPlayer(name: String, email: String?) {
+    @discardableResult
+    func addPlayer(name: String, email: String?, linkedUid: String? = nil) -> Player {
         let used = Set(players.map(\.colorIndex))
         let free = (0..<Palette.pairs.count).first { !used.contains($0) } ?? players.count
-        players.append(Player(name: name, colorIndex: free, email: email))
+        let player = Player(name: name, colorIndex: free, email: email, linkedUid: linkedUid)
+        players.append(player)
         save()
+        return player
+    }
+
+    // MARK: Code joueur
+
+    /// Mon code joueur. Il faut un compte : c'est lui que le code désigne.
+    var myInvite: PlayerInvite? {
+        guard let u = currentUser, !u.isGuest, let uid else { return nil }
+        return PlayerInvite(uid: uid, name: u.name, email: u.email)
+    }
+
+    /// La fiche qui désigne probablement la personne du code scanné : déjà
+    /// reliée à son compte, sinon même e-mail, sinon même nom. Nil : aucune,
+    /// il faudra créer une fiche.
+    func bestMatch(for invite: PlayerInvite) -> Player? {
+        if let p = players.first(where: { $0.linkedUid == invite.uid }) { return p }
+        if let e = invite.email?.lowercased(),
+           let p = players.first(where: { $0.linkedUid == nil && $0.email?.lowercased() == e }) { return p }
+        return players.first {
+            $0.linkedUid == nil && $0.name.localizedCaseInsensitiveCompare(invite.name) == .orderedSame
+        }
+    }
+
+    /// Relie `existing` au compte du code scanné, ou crée une fiche reliée.
+    @discardableResult
+    func link(_ invite: PlayerInvite, to existing: Player?) -> Player {
+        guard let existing, let i = players.firstIndex(where: { $0.id == existing.id }) else {
+            return addPlayer(name: invite.name, email: invite.email, linkedUid: invite.uid)
+        }
+        players[i].linkedUid = invite.uid
+        if players[i].email == nil { players[i].email = invite.email }
+        save()
+        return players[i]
     }
 
     func removePlayer(_ player: Player) {
@@ -457,8 +492,9 @@ final class Store: ObservableObject {
                 }
             }
         }
-        if let k = players.firstIndex(where: { $0.id == kept.id }), players[k].email == nil {
-            players[k].email = duplicate.email
+        if let k = players.firstIndex(where: { $0.id == kept.id }) {
+            if players[k].email == nil { players[k].email = duplicate.email }
+            if players[k].linkedUid == nil { players[k].linkedUid = duplicate.linkedUid }
         }
         players.removeAll { $0.id == duplicate.id }
         save()

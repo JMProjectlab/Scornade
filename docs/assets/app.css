@@ -417,6 +417,12 @@ label.field { display: block; font-size: 13px; color: var(--ink-2); margin-botto
 .login .btn { text-align: center; }
 .login .legal { font-size: 12px; color: var(--ink-2); margin-top: 18px; line-height: 1.5; }
 .login .legal a { color: var(--blue); }
+a.btn { text-decoration: none; }
+/* Le QR code garde un fond blanc et une marge claire, quel que soit le thème :
+   un lecteur en a besoin pour trouver le motif. */
+.qr { background: #fff; border-radius: 18px; padding: 10px; width: min(240px, 100%); margin: 0 auto 12px; }
+.qr svg { display: block; width: 100%; height: auto; }
+.linked { font-size: 13px; }
 .sep { display: flex; align-items: center; gap: 10px; margin: 14px 0; color: var(--ink-2); font-size: 13px; }
 .sep::before, .sep::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
 
