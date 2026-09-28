@@ -53,6 +53,47 @@ struct Player: Identifiable, Codable, Hashable {
     var name: String
     var colorIndex: Int
     var email: String? = nil
+    /// Identifiant du compte Scornade de cette personne, posé en scannant son
+    /// code joueur. Optionnel : les fiches déjà enregistrées se décodent sans.
+    var linkedUid: String? = nil
+}
+
+/// Ce que porte le QR code « Mon code joueur » : un lien vers le site, qui
+/// identifie un compte. Scanné depuis Scornade, il crée ou relie une fiche ;
+/// scanné avec l'appareil photo, il ouvre le site, qui propose l'App Store.
+struct PlayerInvite: Equatable {
+    var uid: String
+    var name: String
+    var email: String?
+
+    static let base = "https://jmprojectlab.fr/Scornade/"
+
+    init(uid: String, name: String, email: String?) {
+        self.uid = uid
+        self.name = name
+        self.email = email
+    }
+
+    var url: URL {
+        var c = URLComponents(string: Self.base)!
+        var items = [URLQueryItem(name: "rejoindre", value: uid), URLQueryItem(name: "n", value: name)]
+        if let email, !email.isEmpty { items.append(URLQueryItem(name: "e", value: email)) }
+        c.queryItems = items
+        return c.url!
+    }
+
+    /// Nil pour tout ce qui n'est pas un code joueur Scornade.
+    init?(string: String) {
+        guard let c = URLComponents(string: string),
+              c.host?.contains("jmprojectlab") == true,
+              let items = c.queryItems,
+              let uid = items.first(where: { $0.name == "rejoindre" })?.value, !uid.isEmpty,
+              let name = items.first(where: { $0.name == "n" })?.value, !name.isEmpty
+        else { return nil }
+        self.uid = uid
+        self.name = name
+        self.email = items.first(where: { $0.name == "e" })?.value
+    }
 }
 
 struct Game: Identifiable, Hashable {
@@ -112,6 +153,16 @@ struct ScoreSession: Identifiable, Codable, Hashable {
             acc + (round.indices.contains(i) ? round[i] : 0)
         }
         return direction == .countdown ? max(0, target - sum) : sum
+    }
+
+    /// Belote : points restés en jeu après la dernière donne, à encaisser par
+    /// le camp qui remportera la suivante.
+    ///
+    /// Seule la dernière donne compte : une donne tranchée solde l'ardoise. Les
+    /// litiges, eux, s'enchaînent — deux de suite mettent 162 points en jeu.
+    var belotePending: Int {
+        guard let last = beloteRounds?.last, last.isLitige else { return 0 }
+        return (last.pending ?? 0) + BeloteRound.litigePoints
     }
 
     /// Phase 10 : la phase en cours d'un joueur, de 1 à 10, puis 11 une fois
@@ -185,6 +236,22 @@ struct BeloteRound: Codable, Hashable {
     var cardPoints: [Int]     // points aux cartes [équipe0, équipe1], somme = 162
     var belote: [Bool]        // belote/rebelote +20 [équipe0, équipe1]
     var capotTeam: Int?       // équipe ayant fait capot, sinon nil
+    /// Points remis en jeu par le ou les litiges qui précèdent cette donne, et
+    /// encaissés par le camp qui la remporte.
+    ///
+    /// Optionnel pour rester lisible : les parties enregistrées avant la règle
+    /// du litige n'ont pas cette clé, et doivent continuer à se décoder.
+    var pending: Int? = nil
+
+    /// Le partage exact des 162 points : 81 de chaque côté.
+    static let litigePoints = 81
+
+    /// Litige : le preneur fait exactement la moitié, le contrat n'est ni tenu
+    /// ni chuté.
+    var isLitige: Bool {
+        capotTeam == nil && cardPoints.indices.contains(takerTeam)
+            && cardPoints[takerTeam] == Self.litigePoints
+    }
 
     var contractMade: Bool {
         if capotTeam != nil { return true }
@@ -193,19 +260,29 @@ struct BeloteRound: Codable, Hashable {
 
     func deltas() -> [Int] {
         var s = [0, 0]
+        let t = takerTeam, def = 1 - takerTeam
+        // Points mis en jeu par le ou les litiges précédents.
+        let carried = pending ?? 0
         if let c = capotTeam {
-            s[c] = 252 + (belote[c] ? 20 : 0)
+            s[c] = 252 + (belote[c] ? 20 : 0) + carried
             let o = 1 - c
             s[o] = belote[o] ? 20 : 0
             return s
         }
-        if cardPoints[takerTeam] >= 82 {
-            for t in 0..<2 { s[t] = cardPoints[t] + (belote[t] ? 20 : 0) }
+        if isLitige {
+            // 81 partout : la défense marque ses 81 points, ceux du preneur sont
+            // remis en jeu pour la donne suivante — avec ceux déjà en attente.
+            s[def] = Self.litigePoints + (belote[def] ? 20 : 0)
+            s[t] = belote[t] ? 20 : 0
+            return s
+        }
+        if cardPoints[t] >= 82 {
+            for i in 0..<2 { s[i] = cardPoints[i] + (belote[i] ? 20 : 0) }
+            s[t] += carried
         } else {
             // Le preneur est "dedans" : les 162 points vont à la défense
-            let def = 1 - takerTeam
-            s[def] = 162 + (belote[def] ? 20 : 0)
-            s[takerTeam] = belote[takerTeam] ? 20 : 0
+            s[def] = 162 + (belote[def] ? 20 : 0) + carried
+            s[t] = belote[t] ? 20 : 0
         }
         return s
     }

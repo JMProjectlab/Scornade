@@ -88,6 +88,69 @@ final class ScornadeTests: XCTestCase {
         XCTAssertEqual(s.winnerIndex, 2, "Le plus petit total gagne")
     }
 
+    // MARK: Belote — le litige à 81 partout
+
+    private func deal(taker: Int = 0, points: [Int] = [81, 81],
+                      belote: [Bool] = [false, false], capot: Int? = nil,
+                      pending: Int = 0) -> BeloteRound {
+        BeloteRound(takerTeam: taker, suit: "♠", cardPoints: points,
+                    belote: belote, capotTeam: capot, pending: pending)
+    }
+
+    func testLitigeLeavesTheTakerWithNothing() {
+        let r = deal()
+        XCTAssertTrue(r.isLitige)
+        XCTAssertEqual(r.deltas(), [0, 81],
+                       "Le preneur ne marque rien, la défense marque ses 81 points")
+        XCTAssertEqual(deal(taker: 1).deltas(), [81, 0])
+    }
+
+    func testBeloteSurvivesALitige() {
+        XCTAssertEqual(deal(belote: [true, false]).deltas(), [20, 81],
+                       "La belote du preneur reste acquise")
+        XCTAssertEqual(deal(belote: [false, true]).deltas(), [0, 101])
+    }
+
+    func testLitigePointsGoToTheWinnerOfTheNextDeal() {
+        var s = session(gameId: "belote", target: 501, higherWins: true)
+        s.beloteRounds = [deal()]
+        XCTAssertEqual(s.belotePending, 81, "Les 81 points du preneur restent en jeu")
+
+        XCTAssertEqual(deal(points: [100, 62], pending: 81).deltas(), [181, 62],
+                       "Contrat tenu : le preneur encaisse les points en jeu")
+        XCTAssertEqual(deal(points: [70, 92], pending: 81).deltas(), [0, 243],
+                       "Preneur dedans : la défense encaisse les 162 et les points en jeu")
+        XCTAssertEqual(deal(points: [0, 0], capot: 1, pending: 81).deltas(), [0, 333],
+                       "Capot : l'auteur du capot encaisse les points en jeu")
+    }
+
+    func testLitigesStackUpAndAreClearedByADecidedDeal() {
+        var s = session(gameId: "belote", target: 501, higherWins: true)
+        s.beloteRounds = [deal(), deal(pending: 81)]
+        XCTAssertEqual(s.belotePending, 162, "Deux litiges de suite mettent 162 points en jeu")
+
+        s.beloteRounds = [deal(), deal(points: [100, 62], pending: 81)]
+        XCTAssertEqual(s.belotePending, 0, "Une donne tranchée solde l'ardoise")
+
+        s.beloteRounds = []
+        XCTAssertEqual(s.belotePending, 0)
+    }
+
+    func testOrdinaryDealsAreUnchangedByTheLitigeRule() {
+        XCTAssertEqual(deal(points: [100, 62]).deltas(), [100, 62])
+        XCTAssertEqual(deal(points: [82, 80]).deltas(), [82, 80], "82 pile tient le contrat")
+        XCTAssertEqual(deal(points: [80, 82]).deltas(), [0, 162], "80 chute, tout part à la défense")
+        XCTAssertEqual(deal(points: [0, 0], capot: 0).deltas(), [252, 0])
+        XCTAssertFalse(deal(points: [100, 62]).isLitige)
+    }
+
+    func testDealsSavedBeforeTheLitigeRuleStillCount() {
+        let old = BeloteRound(takerTeam: 0, suit: "♠", cardPoints: [100, 62],
+                              belote: [false, false], capotTeam: nil)
+        XCTAssertEqual(old.deltas(), [100, 62],
+                       "Une donne enregistrée sans points en jeu se compte comme avant")
+    }
+
     // MARK: Non-régression sur les jeux existants
 
     func testTargetGamesAreUnaffected() {

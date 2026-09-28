@@ -55,6 +55,7 @@ struct Phase10ScoringView: View {
             .padding()
         }
         .navigationTitle(session.gameName)
+        .nightBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -95,7 +96,7 @@ struct Phase10ScoringView: View {
         }
         .font(.subheadline)
         .padding(.horizontal, 14).padding(.vertical, 8)
-        .background(Color(.secondarySystemBackground))
+        .background(Color.cloud)
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
@@ -167,8 +168,8 @@ struct Phase10ScoringView: View {
             .buttonStyle(.borderedProminent).controlSize(.large)
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(.separator), lineWidth: 0.5))
+        .background(Color.cloud.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.hairline, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 

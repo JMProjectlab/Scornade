@@ -50,26 +50,64 @@ export function winnerIndex(session) {
 
 // --- Belote : BeloteRound.deltas() ---------------------------------------
 
+/** Litige : le preneur fait exactement la moitié des 162 points. */
+export const BELOTE_LITIGE = 81;
+
+/** 81 partout : le contrat n'est ni tenu ni chuté. */
+export function beloteIsLitige(r) {
+  return (r.capotTeam === null || r.capotTeam === undefined)
+    && r.cardPoints[r.takerTeam] === BELOTE_LITIGE;
+}
+
+/**
+ * Points restés en jeu après la dernière donne, à encaisser par le camp qui
+ * remportera la suivante.
+ *
+ * Seule la dernière donne compte : une donne tranchée solde l'ardoise. Les
+ * litiges, eux, s'enchaînent — deux de suite mettent 162 points en jeu.
+ */
+export function belotePending(rounds) {
+  const last = rounds?.[rounds.length - 1];
+  if (!last || !beloteIsLitige(last)) return 0;
+  return (last.pending ?? 0) + BELOTE_LITIGE;
+}
+
 export function beloteContractMade(r) {
   if (r.capotTeam !== null && r.capotTeam !== undefined) return true;
   return r.cardPoints[r.takerTeam] >= 82;
 }
 
+/** Issue d'une donne, pour l'affichage : "fait", "litige" ou "chute". */
+export function beloteOutcome(r) {
+  if (beloteIsLitige(r)) return "litige";
+  return beloteContractMade(r) ? "fait" : "chute";
+}
+
 export function beloteDeltas(r) {
   const s = [0, 0];
+  const t = r.takerTeam, d = 1 - t;
+  // Points mis en jeu par le ou les litiges qui précèdent cette donne.
+  const pending = r.pending ?? 0;
   if (r.capotTeam !== null && r.capotTeam !== undefined) {
     const c = r.capotTeam, o = 1 - c;
-    s[c] = 252 + (r.belote[c] ? 20 : 0);
+    s[c] = 252 + (r.belote[c] ? 20 : 0) + pending;
     s[o] = r.belote[o] ? 20 : 0;
     return s;
   }
-  if (r.cardPoints[r.takerTeam] >= 82) {
-    for (let t = 0; t < 2; t++) s[t] = r.cardPoints[t] + (r.belote[t] ? 20 : 0);
+  if (beloteIsLitige(r)) {
+    // 81 partout : la défense marque ses 81 points, ceux du preneur sont remis
+    // en jeu pour la donne suivante — avec ceux déjà en attente, le cas échéant.
+    s[d] = BELOTE_LITIGE + (r.belote[d] ? 20 : 0);
+    s[t] = r.belote[t] ? 20 : 0;
+    return s;
+  }
+  if (r.cardPoints[t] >= 82) {
+    for (let i = 0; i < 2; i++) s[i] = r.cardPoints[i] + (r.belote[i] ? 20 : 0);
+    s[t] += pending;
   } else {
     // Le preneur est dedans : les 162 points partent à la défense.
-    const d = 1 - r.takerTeam;
-    s[d] = 162 + (r.belote[d] ? 20 : 0);
-    s[r.takerTeam] = r.belote[r.takerTeam] ? 20 : 0;
+    s[d] = 162 + (r.belote[d] ? 20 : 0) + pending;
+    s[t] = r.belote[t] ? 20 : 0;
   }
   return s;
 }
