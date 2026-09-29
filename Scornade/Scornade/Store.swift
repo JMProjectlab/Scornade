@@ -79,6 +79,10 @@ final class Store: ObservableObject {
     /// Dernier JSON réellement envoyé pour chaque document, pour ne pousser que
     /// ce qui a changé plutôt que la collection entière à chaque sauvegarde.
     private var pushedPlayers: [String: String] = [:]
+    /// Fiches supprimées ici (suppression, fusion) que le serveur renvoie
+    /// encore. Un instantané parti avant l'effacement arrive parfois après :
+    /// sans cette liste, il remettait aussitôt la fiche dans le carnet.
+    private var deletedPlayerIDs: Set<UUID> = []
     private var pushedSessions: [String: String] = [:]
 
     /// La connexion est obligatoire : sans compte Firebase authentifié, il n'y a
@@ -148,7 +152,19 @@ final class Store: ObservableObject {
 
     func removePlayer(_ player: Player) {
         players.removeAll { $0.id == player.id }
+        forgetPlayer(player.id)
         save()
+    }
+
+    /// Marque la fiche comme supprimée et force son effacement côté serveur,
+    /// même si ce téléphone ne l'a jamais envoyée. Le site écrit ses
+    /// identifiants en minuscules, l'app en majuscules : les deux documents
+    /// possibles sont effacés.
+    private func forgetPlayer(_ id: UUID) {
+        deletedPlayerIDs.insert(id)
+        for key in [id.uuidString, id.uuidString.lowercased()] where pushedPlayers[key] == nil {
+            pushedPlayers[key] = ""
+        }
     }
 
     // MARK: Sessions
@@ -523,6 +539,7 @@ final class Store: ObservableObject {
             if players[k].linkedUid == nil { players[k].linkedUid = duplicate.linkedUid }
         }
         players.removeAll { $0.id == duplicate.id }
+        forgetPlayer(duplicate.id)
         save()
     }
 
@@ -787,9 +804,11 @@ final class Store: ObservableObject {
     /// Fusionne sans jamais supprimer localement : une absence côté serveur peut
     /// simplement signifier que l'entrée locale n'a pas encore été poussée.
     private func mergePlayers(_ remote: [Player]) {
+        // Une fiche supprimée reste écartée tant que le serveur la renvoie.
+        deletedPlayerIDs.formIntersection(remote.map(\.id))
         guard !remote.isEmpty else { return }
         var byID = Dictionary(uniqueKeysWithValues: players.map { ($0.id, $0) })
-        for p in remote { byID[p.id] = p }
+        for p in remote where !deletedPlayerIDs.contains(p.id) { byID[p.id] = p }
         players = Array(byID.values).sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
         saveLocalCacheOnly()
     }
