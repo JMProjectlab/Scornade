@@ -7,87 +7,38 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0444B47B52ECB5B597C01AC3 /* StatsCharts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19FBF747EE3E6A5552B3C27 /* StatsCharts.swift */; };
-		051A70913AF7364053DAA475 /* GameGlyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2406A7D244492F436A9EFA4 /* GameGlyph.swift */; };
-		0B8A91FB9F95CDE263CE99AA /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA9BAFA8FFB2FE287120F2D4 /* HistoryView.swift */; };
 		2BA1C0010001000000000002 /* Phase10ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BA1C0010001000000000001 /* Phase10ScoringView.swift */; };
-		2BA1C0010001000000000003 /* Phase10ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BA1C0010001000000000001 /* Phase10ScoringView.swift */; };
-		2BA1C0010001000000000004 /* Phase10ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BA1C0010001000000000001 /* Phase10ScoringView.swift */; };
-		18CEAEE99D4BA51A302F592A /* MolkkyScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CF21EA041DDF69063F7F18 /* MolkkyScoringView.swift */; };
 		2B780A622FE092F400B4E0E3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2B780A612FE092F400B4E0E3 /* Assets.xcassets */; };
 		2B780A652FE092F400B4E0E3 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2B780A642FE092F400B4E0E3 /* Preview Assets.xcassets */; };
 		2B780A6F2FE092F500B4E0E3 /* ScornadeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A6E2FE092F500B4E0E3 /* ScornadeTests.swift */; };
 		2B780A792FE092F500B4E0E3 /* ScornadeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A782FE092F500B4E0E3 /* ScornadeUITests.swift */; };
 		2B780A7B2FE092F500B4E0E3 /* ScornadeUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A7A2FE092F500B4E0E3 /* ScornadeUITestsLaunchTests.swift */; };
 		2B780A972FE0932200B4E0E3 /* TarotScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A882FE0932100B4E0E3 /* TarotScoringView.swift */; };
-		2B780A982FE0932200B4E0E3 /* TarotScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A882FE0932100B4E0E3 /* TarotScoringView.swift */; };
-		2B780A992FE0932200B4E0E3 /* TarotScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A882FE0932100B4E0E3 /* TarotScoringView.swift */; };
 		2B780A9A2FE0932200B4E0E3 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A892FE0932100B4E0E3 /* StatsView.swift */; };
-		2B780A9B2FE0932200B4E0E3 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A892FE0932100B4E0E3 /* StatsView.swift */; };
-		2B780A9C2FE0932200B4E0E3 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A892FE0932100B4E0E3 /* StatsView.swift */; };
 		2B780AA62FE0932200B4E0E3 /* PayooScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A8D2FE0932100B4E0E3 /* PayooScoringView.swift */; };
-		2B780AA72FE0932200B4E0E3 /* PayooScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A8D2FE0932100B4E0E3 /* PayooScoringView.swift */; };
-		2B780AA82FE0932200B4E0E3 /* PayooScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A8D2FE0932100B4E0E3 /* PayooScoringView.swift */; };
 		2B780AA92FE0932200B4E0E3 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A8E2FE0932100B4E0E3 /* LoginView.swift */; };
-		2B780AAA2FE0932200B4E0E3 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A8E2FE0932100B4E0E3 /* LoginView.swift */; };
-		2B780AAB2FE0932200B4E0E3 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A8E2FE0932100B4E0E3 /* LoginView.swift */; };
 		2B780AAC2FE0932200B4E0E3 /* ScornadeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A8F2FE0932100B4E0E3 /* ScornadeApp.swift */; };
-		2B780AAD2FE0932200B4E0E3 /* ScornadeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A8F2FE0932100B4E0E3 /* ScornadeApp.swift */; };
-		2B780AAE2FE0932200B4E0E3 /* ScornadeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A8F2FE0932100B4E0E3 /* ScornadeApp.swift */; };
 		2B780AAF2FE0932200B4E0E3 /* NewGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A902FE0932100B4E0E3 /* NewGameView.swift */; };
-		2B780AB02FE0932200B4E0E3 /* NewGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A902FE0932100B4E0E3 /* NewGameView.swift */; };
-		2B780AB12FE0932200B4E0E3 /* NewGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A902FE0932100B4E0E3 /* NewGameView.swift */; };
 		2B780AB52FE0932200B4E0E3 /* BeloteScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A922FE0932200B4E0E3 /* BeloteScoringView.swift */; };
-		2B780AB62FE0932200B4E0E3 /* BeloteScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A922FE0932200B4E0E3 /* BeloteScoringView.swift */; };
-		2B780AB72FE0932200B4E0E3 /* BeloteScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A922FE0932200B4E0E3 /* BeloteScoringView.swift */; };
 		2B780ABB2FE0932200B4E0E3 /* ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A942FE0932200B4E0E3 /* ScoringView.swift */; };
-		2B780ABC2FE0932200B4E0E3 /* ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A942FE0932200B4E0E3 /* ScoringView.swift */; };
-		2B780ABD2FE0932200B4E0E3 /* ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A942FE0932200B4E0E3 /* ScoringView.swift */; };
 		2B780ABE2FE0932200B4E0E3 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 2B780A952FE0932200B4E0E3 /* README.md */; };
 		2B780ABF2FE0932200B4E0E3 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 2B780A952FE0932200B4E0E3 /* README.md */; };
 		2B780AC02FE0932200B4E0E3 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 2B780A952FE0932200B4E0E3 /* README.md */; };
 		2B780AC12FE0932200B4E0E3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A962FE0932200B4E0E3 /* Theme.swift */; };
-		2B780AC22FE0932200B4E0E3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A962FE0932200B4E0E3 /* Theme.swift */; };
-		2B780AC32FE0932200B4E0E3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780A962FE0932200B4E0E3 /* Theme.swift */; };
 		2B780AC62FE098A500B4E0E3 /* PlayersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AC42FE098A500B4E0E3 /* PlayersView.swift */; };
-		2B780AC72FE098A500B4E0E3 /* PlayersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AC42FE098A500B4E0E3 /* PlayersView.swift */; };
-		2B780AC82FE098A500B4E0E3 /* PlayersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AC42FE098A500B4E0E3 /* PlayersView.swift */; };
 		2B780AD32FE0999400B4E0E3 /* CoincheScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780ACD2FE0999400B4E0E3 /* CoincheScoringView.swift */; };
-		2B780AD42FE0999400B4E0E3 /* CoincheScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780ACD2FE0999400B4E0E3 /* CoincheScoringView.swift */; };
-		2B780AD52FE0999400B4E0E3 /* CoincheScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780ACD2FE0999400B4E0E3 /* CoincheScoringView.swift */; };
 		2B780AE42FE09B1B00B4E0E3 /* YamsScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780ADD2FE09B1B00B4E0E3 /* YamsScoringView.swift */; };
-		2B780AE52FE09B1B00B4E0E3 /* YamsScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780ADD2FE09B1B00B4E0E3 /* YamsScoringView.swift */; };
-		2B780AE62FE09B1B00B4E0E3 /* YamsScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780ADD2FE09B1B00B4E0E3 /* YamsScoringView.swift */; };
 		2B780AED2FE09B1B00B4E0E3 /* FlechettesScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AE02FE09B1B00B4E0E3 /* FlechettesScoringView.swift */; };
-		2B780AEE2FE09B1B00B4E0E3 /* FlechettesScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AE02FE09B1B00B4E0E3 /* FlechettesScoringView.swift */; };
-		2B780AEF2FE09B1B00B4E0E3 /* FlechettesScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AE02FE09B1B00B4E0E3 /* FlechettesScoringView.swift */; };
 		2B780AF12FE09CF000B4E0E3 /* Game421ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF02FE09CF000B4E0E3 /* Game421ScoringView.swift */; };
-		2B780AF22FE09CF000B4E0E3 /* Game421ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF02FE09CF000B4E0E3 /* Game421ScoringView.swift */; };
-		2B780AF32FE09CF000B4E0E3 /* Game421ScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF02FE09CF000B4E0E3 /* Game421ScoringView.swift */; };
 		2B780AF92FE09D2A00B4E0E3 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF42FE09D2A00B4E0E3 /* HomeView.swift */; };
-		2B780AFA2FE09D2A00B4E0E3 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF42FE09D2A00B4E0E3 /* HomeView.swift */; };
-		2B780AFB2FE09D2A00B4E0E3 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF42FE09D2A00B4E0E3 /* HomeView.swift */; };
 		2B780B022FE09D2A00B4E0E3 /* GameCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF72FE09D2A00B4E0E3 /* GameCatalog.swift */; };
-		2B780B032FE09D2A00B4E0E3 /* GameCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF72FE09D2A00B4E0E3 /* GameCatalog.swift */; };
-		2B780B042FE09D2A00B4E0E3 /* GameCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF72FE09D2A00B4E0E3 /* GameCatalog.swift */; };
 		2B780B052FE09D2A00B4E0E3 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF82FE09D2A00B4E0E3 /* Models.swift */; };
-		2B780B062FE09D2A00B4E0E3 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF82FE09D2A00B4E0E3 /* Models.swift */; };
-		2B780B072FE09D2A00B4E0E3 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780AF82FE09D2A00B4E0E3 /* Models.swift */; };
 		2B780B092FE09D4F00B4E0E3 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780B082FE09D4F00B4E0E3 /* Store.swift */; };
-		2B780B0A2FE09D4F00B4E0E3 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780B082FE09D4F00B4E0E3 /* Store.swift */; };
-		2B780B0B2FE09D4F00B4E0E3 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B780B082FE09D4F00B4E0E3 /* Store.swift */; };
 		377DE1AD912585E39DA30E58 /* StatsCharts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19FBF747EE3E6A5552B3C27 /* StatsCharts.swift */; };
-		41A415A5BE7EB0FEE909B1A9 /* RoundEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB21285DB190638FCAF2B8F9 /* RoundEditorSheet.swift */; };
 		4A94CFC44BC1E191D1C51848 /* FirebaseSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39B929D90F2A1B1DDC458F7F /* FirebaseSupport.swift */; };
-		52B2E3DD6EE6FB65251AB565 /* RoundEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB21285DB190638FCAF2B8F9 /* RoundEditorSheet.swift */; };
-		557412B687F5EA26A542B399 /* MolkkyScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CF21EA041DDF69063F7F18 /* MolkkyScoringView.swift */; };
-		565118EACA54992A26A8315C /* GameGlyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2406A7D244492F436A9EFA4 /* GameGlyph.swift */; };
 		73E656652875FB92FEFAC5D8 /* RoundEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB21285DB190638FCAF2B8F9 /* RoundEditorSheet.swift */; };
-		7EE1A2B212FA806355709844 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA9BAFA8FFB2FE287120F2D4 /* HistoryView.swift */; };
 		81AD0E789CEE8F07740CA219 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 71D0F52B79DE89AB805F249D /* Localizable.xcstrings */; };
 		8EC103FEF847091EB97CF2EE /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 71D0F52B79DE89AB805F249D /* Localizable.xcstrings */; };
-		8FF31902FBB9FFFF249DABA2 /* StatsCharts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19FBF747EE3E6A5552B3C27 /* StatsCharts.swift */; };
-		9E489D09D5CBF42E41C91147 /* FirebaseSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39B929D90F2A1B1DDC458F7F /* FirebaseSupport.swift */; };
 		B307C15017F94AA1F5FBEFFB /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 71D0F52B79DE89AB805F249D /* Localizable.xcstrings */; };
 		D46397FB3035015900EDE89B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D46397FA3035015900EDE89B /* PrivacyInfo.xcprivacy */; };
 		D49EBD563033A5D800B4FFCF /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = D49EBD553033A5D800B4FFCF /* FirebaseAuth */; };
@@ -96,7 +47,6 @@
 		D49EBD5D3033A75700B4FFCF /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = D49EBD5C3033A75600B4FFCF /* GoogleService-Info.plist */; };
 		D49EBD5E3033A75700B4FFCF /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = D49EBD5C3033A75600B4FFCF /* GoogleService-Info.plist */; };
 		D49EBD5F3033A75700B4FFCF /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = D49EBD5C3033A75600B4FFCF /* GoogleService-Info.plist */; };
-		D9BF11A49118A8DDE5F7DE8F /* FirebaseSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39B929D90F2A1B1DDC458F7F /* FirebaseSupport.swift */; };
 		DC0D1D2559D15C0712C73D0F /* GameGlyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2406A7D244492F436A9EFA4 /* GameGlyph.swift */; };
 		E050BA32DDE4838A938F9015 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA9BAFA8FFB2FE287120F2D4 /* HistoryView.swift */; };
 		FF2C3721EBD162444AF4C595 /* MolkkyScoringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CF21EA041DDF69063F7F18 /* MolkkyScoringView.swift */; };
@@ -454,32 +404,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2B780AA72FE0932200B4E0E3 /* PayooScoringView.swift in Sources */,
 				2B780A6F2FE092F500B4E0E3 /* ScornadeTests.swift in Sources */,
-				2B780B032FE09D2A00B4E0E3 /* GameCatalog.swift in Sources */,
-				2B780AD42FE0999400B4E0E3 /* CoincheScoringView.swift in Sources */,
-				2B780A982FE0932200B4E0E3 /* TarotScoringView.swift in Sources */,
-				2B780AE52FE09B1B00B4E0E3 /* YamsScoringView.swift in Sources */,
-				2B780AC72FE098A500B4E0E3 /* PlayersView.swift in Sources */,
-				2B780AAD2FE0932200B4E0E3 /* ScornadeApp.swift in Sources */,
-				2B780A9B2FE0932200B4E0E3 /* StatsView.swift in Sources */,
-				2B780AB02FE0932200B4E0E3 /* NewGameView.swift in Sources */,
-				2B780AB62FE0932200B4E0E3 /* BeloteScoringView.swift in Sources */,
-				2B780AAA2FE0932200B4E0E3 /* LoginView.swift in Sources */,
-				2B780AC22FE0932200B4E0E3 /* Theme.swift in Sources */,
-				2B780ABC2FE0932200B4E0E3 /* ScoringView.swift in Sources */,
-				2B780B0A2FE09D4F00B4E0E3 /* Store.swift in Sources */,
-				2B780AFA2FE09D2A00B4E0E3 /* HomeView.swift in Sources */,
-				2B780AEE2FE09B1B00B4E0E3 /* FlechettesScoringView.swift in Sources */,
-				2B780AF22FE09CF000B4E0E3 /* Game421ScoringView.swift in Sources */,
-				2B780B062FE09D2A00B4E0E3 /* Models.swift in Sources */,
-				18CEAEE99D4BA51A302F592A /* MolkkyScoringView.swift in Sources */,
-				2BA1C0010001000000000003 /* Phase10ScoringView.swift in Sources */,
-				565118EACA54992A26A8315C /* GameGlyph.swift in Sources */,
-				7EE1A2B212FA806355709844 /* HistoryView.swift in Sources */,
-				41A415A5BE7EB0FEE909B1A9 /* RoundEditorSheet.swift in Sources */,
-				0444B47B52ECB5B597C01AC3 /* StatsCharts.swift in Sources */,
-				9E489D09D5CBF42E41C91147 /* FirebaseSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -487,33 +412,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2B780B0B2FE09D4F00B4E0E3 /* Store.swift in Sources */,
-				2B780AEF2FE09B1B00B4E0E3 /* FlechettesScoringView.swift in Sources */,
-				2B780AA82FE0932200B4E0E3 /* PayooScoringView.swift in Sources */,
-				2B780AAB2FE0932200B4E0E3 /* LoginView.swift in Sources */,
-				2B780AB12FE0932200B4E0E3 /* NewGameView.swift in Sources */,
-				2B780AF32FE09CF000B4E0E3 /* Game421ScoringView.swift in Sources */,
-				2B780B072FE09D2A00B4E0E3 /* Models.swift in Sources */,
-				2B780AFB2FE09D2A00B4E0E3 /* HomeView.swift in Sources */,
-				2B780AC82FE098A500B4E0E3 /* PlayersView.swift in Sources */,
-				2B780A9C2FE0932200B4E0E3 /* StatsView.swift in Sources */,
-				2B780A992FE0932200B4E0E3 /* TarotScoringView.swift in Sources */,
-				2B780AC32FE0932200B4E0E3 /* Theme.swift in Sources */,
-				2B780AD52FE0999400B4E0E3 /* CoincheScoringView.swift in Sources */,
 				2B780A7B2FE092F500B4E0E3 /* ScornadeUITestsLaunchTests.swift in Sources */,
-				2B780AE62FE09B1B00B4E0E3 /* YamsScoringView.swift in Sources */,
-				2B780AAE2FE0932200B4E0E3 /* ScornadeApp.swift in Sources */,
-				2B780ABD2FE0932200B4E0E3 /* ScoringView.swift in Sources */,
-				2B780B042FE09D2A00B4E0E3 /* GameCatalog.swift in Sources */,
 				2B780A792FE092F500B4E0E3 /* ScornadeUITests.swift in Sources */,
-				2B780AB72FE0932200B4E0E3 /* BeloteScoringView.swift in Sources */,
-				557412B687F5EA26A542B399 /* MolkkyScoringView.swift in Sources */,
-				2BA1C0010001000000000004 /* Phase10ScoringView.swift in Sources */,
-				051A70913AF7364053DAA475 /* GameGlyph.swift in Sources */,
-				0B8A91FB9F95CDE263CE99AA /* HistoryView.swift in Sources */,
-				52B2E3DD6EE6FB65251AB565 /* RoundEditorSheet.swift in Sources */,
-				8FF31902FBB9FFFF249DABA2 /* StatsCharts.swift in Sources */,
-				D9BF11A49118A8DDE5F7DE8F /* FirebaseSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
