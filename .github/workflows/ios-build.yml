@@ -59,7 +59,9 @@ jobs:
       - name: Compiler l'app
         run: |
           set -o pipefail
-          xcodebuild build \
+          # build-for-testing compile l'app ET les cibles de tests, qui
+          # recompilent les mêmes sources avec leurs propres réglages.
+          xcodebuild build-for-testing \
             -project Scornade/Scornade.xcodeproj \
             -scheme Scornade \
             -destination 'generic/platform=iOS Simulator' \

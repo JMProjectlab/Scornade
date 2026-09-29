@@ -60,8 +60,9 @@ final class Store: ObservableObject {
     // un seul appareil à la fois ; le partage à plusieurs demandera un vrai
     // découpage en sous-collection de manches.
 
-    private static let payloadField = "payload"
-    private static let updatedAtField = "updatedAt"
+    // nonisolated : lus depuis decodeAll, qui tourne hors du MainActor.
+    private nonisolated static let payloadField = "payload"
+    private nonisolated static let updatedAtField = "updatedAt"
 
     private lazy var db = Firestore.firestore()
     private var playersListener: ListenerRegistration?

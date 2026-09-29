@@ -98,7 +98,7 @@ struct LoginView: View {
         // Quand la vue est présentée depuis l'onglet Joueurs pour rattacher un
         // compte à une session locale, elle se referme d'elle-même une fois la
         // connexion faite. À la racine de l'app, `dismiss()` ne fait rien.
-        .onChange(of: store.currentUser) { user in
+        .onChange(of: store.currentUser) { _, user in
             if let user, !user.isGuest { dismiss() }
         }
     }
@@ -141,10 +141,14 @@ struct LoginView: View {
                     return
                 }
                 let profile = googleUser.profile
-                store.signIn(id: authResult?.user.uid ?? UUID().uuidString,
-                             name: profile?.name ?? "Joueur Google",
-                             email: profile?.email,
-                             mode: .google)
+                let uid = authResult?.user.uid ?? UUID().uuidString
+                let name = profile?.name ?? "Joueur Google"
+                let email = profile?.email
+                // Le rappel de Firebase n'est pas garanti sur le fil principal ;
+                // le Store, lui, vit sur le MainActor.
+                Task { @MainActor in
+                    store.signIn(id: uid, name: name, email: email, mode: .google)
+                }
             }
         }
     }
@@ -196,10 +200,13 @@ struct LoginView: View {
                     authError = error.localizedDescription
                     return
                 }
-                store.signIn(id: authResult?.user.uid ?? cred.user,
-                             name: displayName,
-                             email: cred.email ?? authResult?.user.email,
-                             mode: .apple)
+                let uid = authResult?.user.uid ?? cred.user
+                let email = cred.email ?? authResult?.user.email
+                // Le rappel de Firebase n'est pas garanti sur le fil principal ;
+                // le Store, lui, vit sur le MainActor.
+                Task { @MainActor in
+                    store.signIn(id: uid, name: displayName, email: email, mode: .apple)
+                }
             }
         case .failure(let error):
             currentNonce = nil
