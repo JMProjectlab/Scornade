@@ -136,14 +136,26 @@ function decode(snapshot) {
   return out;
 }
 
+/** Inscrit les documents du serveur dans le registre des envois. Sans ça, une
+ *  fiche reçue du serveur puis supprimée ici (fusion, suppression) n'était
+ *  jamais effacée côté serveur, et l'instantané suivant la faisait revenir. */
+function remember(snapshot, name) {
+  snapshot.forEach((doc) => {
+    const raw = doc.data()?.payload;
+    if (typeof raw === "string") pushed[name].set(doc.id, raw);
+  });
+}
+
 function startListening(userId) {
   stopListening();
   const root = mods.doc(db, "users", userId);
 
   unsubPlayers = mods.onSnapshot(mods.collection(root, "players"), (snap) => {
+    remember(snap, "players");
     mergeRemote({ players: decode(snap) });
   });
   unsubSessions = mods.onSnapshot(mods.collection(root, "sessions"), (snap) => {
+    remember(snap, "sessions");
     mergeRemote({ sessions: decode(snap) });
   });
 

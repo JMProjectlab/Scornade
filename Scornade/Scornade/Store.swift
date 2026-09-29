@@ -646,16 +646,20 @@ final class Store: ObservableObject {
         playersListener = root.collection("players").addSnapshotListener { [weak self] snap, _ in
             guard let snap else { return }
             let remote = Self.decodeAll(Player.self, from: snap.documents)
+            let payloads = Self.payloads(of: snap.documents)
             Task { @MainActor in
                 guard let self, self.uid == uid else { return }
+                self.pushedPlayers.merge(payloads) { _, server in server }
                 self.mergePlayers(remote)
             }
         }
         sessionsListener = root.collection("sessions").addSnapshotListener { [weak self] snap, _ in
             guard let snap else { return }
             let remote = Self.decodeAll(ScoreSession.self, from: snap.documents)
+            let payloads = Self.payloads(of: snap.documents)
             Task { @MainActor in
                 guard let self, self.uid == uid else { return }
+                self.pushedSessions.merge(payloads) { _, server in server }
                 self.mergeSessions(remote)
             }
         }
@@ -714,6 +718,18 @@ final class Store: ObservableObject {
     private func stopSync() {
         playersListener?.remove(); playersListener = nil
         sessionsListener?.remove(); sessionsListener = nil
+    }
+
+    /// Ce que le serveur contient, document par document. Ces documents
+    /// entrent dans le registre des envois : sans ça, une fiche reçue du
+    /// serveur puis supprimée ici (fusion, suppression) n'était jamais effacée
+    /// côté serveur, et l'instantané suivant la faisait réapparaître.
+    private nonisolated static func payloads(of docs: [QueryDocumentSnapshot]) -> [String: String] {
+        var out: [String: String] = [:]
+        for doc in docs {
+            if let json = doc[payloadField] as? String { out[doc.documentID] = json }
+        }
+        return out
     }
 
     private nonisolated static func decodeAll<T: Decodable>(_ type: T.Type,
