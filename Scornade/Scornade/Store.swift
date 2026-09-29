@@ -85,6 +85,20 @@ final class Store: ObservableObject {
     private var deletedPlayerIDs: Set<UUID> = []
     private var pushedSessions: [String: String] = [:]
 
+    /// Documents que le serveur contenait au dernier instantané, gardés d'un
+    /// lancement à l'autre. Un document connu qui disparaît du serveur a été
+    /// supprimé depuis un autre appareil : il est retiré ici aussi, au lieu
+    /// d'être renvoyé au serveur, ce qui le faisait revenir partout.
+    private var serverPlayerIDs: Set<String> = []
+    private var serverSessionIDs: Set<String> = []
+    /// Rien ne part au serveur avant d'avoir appris ce qu'il contient : sinon
+    /// les fiches supprimées ailleurs repartiraient avant d'être reconnues.
+    private var playersSnapshotSeen = false
+    private var sessionsSnapshotSeen = false
+    private var syncReady: Bool { playersSnapshotSeen && sessionsSnapshotSeen }
+    private var initialPushDone = false
+    private func serverIDsKey(_ kind: String, _ space: String) -> String { "sm.onServer.\(kind).\(space)" }
+
     /// La connexion est obligatoire : sans compte Firebase authentifié, il n'y a
     /// rien à synchroniser. Le cache local sert alors de secours hors-ligne.
     private var syncEnabled: Bool {
@@ -558,8 +572,13 @@ final class Store: ObservableObject {
         path = NavigationPath()
         pushedPlayers = [:]
         pushedSessions = [:]
+        serverPlayerIDs = []
+        serverSessionIDs = []
         var keys = [userKey]
-        if let erased = spaceToErase { keys += [playersKey(erased), sessionsKey(erased)] }
+        if let erased = spaceToErase {
+            keys += [playersKey(erased), sessionsKey(erased),
+                     serverIDsKey("players", erased), serverIDsKey("sessions", erased)]
+        }
         for key in keys {
             UserDefaults.standard.removeObject(forKey: key)
         }
@@ -633,6 +652,9 @@ final class Store: ObservableObject {
     private func loadSpace() {
         pushedPlayers = [:]
         pushedSessions = [:]
+        let d = UserDefaults.standard
+        serverPlayerIDs = Set(space.flatMap { d.stringArray(forKey: serverIDsKey("players", $0)) } ?? [])
+        serverSessionIDs = Set(space.flatMap { d.stringArray(forKey: serverIDsKey("sessions", $0)) } ?? [])
         guard let space else {
             players = []
             sessions = []
@@ -660,29 +682,80 @@ final class Store: ObservableObject {
 
         // Un instantané parti avant un changement de compte peut arriver après :
         // il ne s'applique que si le compte qui l'a demandé est toujours ouvert.
-        playersListener = root.collection("players").addSnapshotListener { [weak self] snap, _ in
+        playersSnapshotSeen = false
+        sessionsSnapshotSeen = false
+        initialPushDone = false
+        // Les changements de métadonnées sont écoutés : quand le cache est déjà
+        // à jour, c'est le seul signal que le serveur a répondu.
+        playersListener = root.collection("players").addSnapshotListener(includeMetadataChanges: true) { [weak self] snap, _ in
             guard let snap else { return }
             let remote = Self.decodeAll(Player.self, from: snap.documents)
             let payloads = Self.payloads(of: snap.documents)
+            let fromServer = !snap.metadata.isFromCache
             Task { @MainActor in
                 guard let self, self.uid == uid else { return }
-                self.pushedPlayers.merge(payloads) { _, server in server }
+                if fromServer {
+                    let gone = Self.goneElsewhere(known: self.serverPlayerIDs, server: payloads,
+                                                  stillThere: Set(remote.map(\.id)))
+                    self.players.removeAll { gone.contains($0.id) }
+                    self.pushedPlayers = payloads
+                    self.serverPlayerIDs = Set(payloads.keys)
+                    self.playersSnapshotSeen = true
+                } else {
+                    self.pushedPlayers.merge(payloads) { _, server in server }
+                }
                 self.mergePlayers(remote)
+                if fromServer { self.afterServerSnapshot() }
             }
         }
-        sessionsListener = root.collection("sessions").addSnapshotListener { [weak self] snap, _ in
+        sessionsListener = root.collection("sessions").addSnapshotListener(includeMetadataChanges: true) { [weak self] snap, _ in
             guard let snap else { return }
             let remote = Self.decodeAll(ScoreSession.self, from: snap.documents)
             let payloads = Self.payloads(of: snap.documents)
+            let fromServer = !snap.metadata.isFromCache
             Task { @MainActor in
                 guard let self, self.uid == uid else { return }
-                self.pushedSessions.merge(payloads) { _, server in server }
+                if fromServer {
+                    let gone = Self.goneElsewhere(known: self.serverSessionIDs, server: payloads,
+                                                  stillThere: Set(remote.map(\.id)))
+                    self.sessions.removeAll { gone.contains($0.id) }
+                    self.pushedSessions = payloads
+                    self.serverSessionIDs = Set(payloads.keys)
+                    self.sessionsSnapshotSeen = true
+                } else {
+                    self.pushedSessions.merge(payloads) { _, server in server }
+                }
                 self.mergeSessions(remote)
+                if fromServer { self.afterServerSnapshot() }
             }
         }
+    }
 
-        // Ce qui existe déjà en local et pas encore côté serveur part au premier envoi.
+    /// Mémorise ce que le serveur contient, puis envoie ce qui n'existe encore
+    /// qu'ici : le premier envoi n'a lieu qu'une fois les deux collections lues.
+    private func afterServerSnapshot() {
+        saveLocalCacheOnly()
+        if let space {
+            let d = UserDefaults.standard
+            d.set(Array(serverPlayerIDs), forKey: serverIDsKey("players", space))
+            d.set(Array(serverSessionIDs), forKey: serverIDsKey("sessions", space))
+        }
+        // Une seule fois : l'app et le site n'écrivent pas le JSON à
+        // l'identique, et renvoyer après chaque instantané les ferait se
+        // répondre sans fin.
+        guard syncReady, !initialPushDone else { return }
+        initialPushDone = true
         pushChanges()
+    }
+
+    /// Ce qui a disparu du serveur alors que ce téléphone l'y avait vu : effacé
+    /// depuis un autre appareil. Un même identifiant peut exister sous deux
+    /// écritures (majuscules pour l'app, minuscules pour le site) ; tant que
+    /// l'une des deux reste, rien n'est retiré.
+    private nonisolated static func goneElsewhere(known: Set<String>, server: [String: String],
+                                                  stillThere: Set<UUID>) -> Set<UUID> {
+        Set(known.filter { server[$0] == nil }.compactMap(UUID.init(uuidString:)))
+            .subtracting(stillThere)
     }
 
     /// Écoute les corrections du catalogue, avec ou sans compte.
@@ -762,7 +835,7 @@ final class Store: ObservableObject {
     /// N'envoie que les documents dont le JSON a changé, et supprime ceux qui ont
     /// disparu localement.
     private func pushChanges() {
-        guard syncEnabled, let uid else { return }
+        guard syncEnabled, syncReady, let uid else { return }
         let root = db.collection("users").document(uid)
         let enc = JSONEncoder()
 

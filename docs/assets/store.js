@@ -440,6 +440,15 @@ export function deleteSession(id) {
  * ne supprime rien : elle peut simplement signifier que l'entrée locale n'a pas
  * encore été poussée.
  */
+/** Retire ce qu'un autre appareil a supprimé du serveur, sans rien renvoyer. */
+export function dropRemoved(name, ids) {
+  if (!ids.length) return;
+  const gone = new Set(ids.map((id) => String(id).toUpperCase()));
+  state[name] = state[name].filter((item) => !gone.has(String(item.id).toUpperCase()));
+  persistLocal();
+  emit();
+}
+
 export function mergeRemote({ players, sessions }) {
   if (players) {
     const remoteIds = new Set(players.map((p) => p.id));

@@ -6,7 +6,7 @@
 // sérialisé en JSON dans un champ `payload` — pour que les deux clients lisent
 // et écrivent les mêmes données.
 
-import { mergeRemote, setUser, state } from "./store.js";
+import { dropRemoved, mergeRemote, setUser, state } from "./store.js";
 import { applyCatalogOverrides, cacheCatalog } from "./data.js";
 
 const SDK = "https://www.gstatic.com/firebasejs/10.12.2";
@@ -18,6 +18,20 @@ let db = null;
 let unsubPlayers = null;
 let unsubSessions = null;
 const pushed = { players: new Map(), sessions: new Map() };
+// Documents que le serveur contenait au dernier instantané, gardés d'une visite
+// à l'autre. Un document connu qui disparaît du serveur a été supprimé depuis
+// un autre appareil : il est retiré ici aussi, au lieu d'être renvoyé au
+// serveur, ce qui le faisait revenir partout.
+let onServer = { players: new Set(), sessions: new Set() };
+// Rien ne part au serveur avant d'avoir appris ce qu'il contient.
+let seen = { players: false, sessions: false };
+let listeningUid = null;
+let initialPushDone = false;
+const onServerKey = (name, userId) => `sm.onServer.${name}.${userId}`;
+
+function readIds(key) {
+  try { return new Set(JSON.parse(localStorage.getItem(key) || "[]")); } catch { return new Set(); }
+}
 
 /** Lit la configuration si elle a été déposée à côté. */
 async function loadConfig() {
@@ -150,17 +164,43 @@ function startListening(userId) {
   stopListening();
   const root = mods.doc(db, "users", userId);
 
-  unsubPlayers = mods.onSnapshot(mods.collection(root, "players"), (snap) => {
-    remember(snap, "players");
-    mergeRemote({ players: decode(snap) });
+  listeningUid = userId;
+  onServer = { players: readIds(onServerKey("players", userId)), sessions: readIds(onServerKey("sessions", userId)) };
+  seen = { players: false, sessions: false };
+  initialPushDone = false;
+
+  // Les changements de métadonnées sont écoutés : quand le cache est déjà à
+  // jour, c'est le seul signal que le serveur a répondu.
+  const listen = (name) => mods.onSnapshot(mods.collection(root, name), { includeMetadataChanges: true }, (snap) => {
+    const items = decode(snap);
+    if (snap.metadata.fromCache) {
+      remember(snap, name);
+      mergeRemote({ [name]: items });
+      return;
+    }
+    // Un même identifiant peut exister en majuscules (app) et en minuscules
+    // (site) : tant que l'une des deux écritures reste, rien n'est retiré.
+    const ids = new Set(snap.docs.map((d) => d.id));
+    const still = new Set(items.map((i) => String(i.id).toUpperCase()));
+    const gone = [...onServer[name]].filter((id) => !ids.has(id) && !still.has(id.toUpperCase()));
+    dropRemoved(name, gone);
+    pushed[name].clear();
+    remember(snap, name);
+    onServer[name] = ids;
+    try { localStorage.setItem(onServerKey(name, userId), JSON.stringify([...ids])); } catch { /* navigation privée */ }
+    seen[name] = true;
+    mergeRemote({ [name]: items });
+    // Une seule fois : l'app et le site n'écrivent pas le JSON à l'identique,
+    // et renvoyer après chaque instantané les ferait se répondre sans fin.
+    if (seen.players && seen.sessions && !initialPushDone) {
+      initialPushDone = true;
+      push(state);
+    }
   });
-  unsubSessions = mods.onSnapshot(mods.collection(root, "sessions"), (snap) => {
-    remember(snap, "sessions");
-    mergeRemote({ sessions: decode(snap) });
-  });
+  unsubPlayers = listen("players");
+  unsubSessions = listen("sessions");
 
   state.sync = { push, stop: stopListening, deleteAll };
-  push(state);
 }
 
 /** Arrête la synchronisation du compte — mais pas l'écoute du catalogue, qui ne
@@ -173,7 +213,7 @@ function stopListening() {
 /** N'écrit que les documents dont le JSON a changé depuis le dernier envoi. */
 async function push(current) {
   const user = auth?.currentUser;
-  if (!user) return;
+  if (!user || user.uid !== listeningUid || !seen.players || !seen.sessions) return;
   const root = mods.doc(db, "users", user.uid);
   const batch = mods.writeBatch(db);
   let writes = 0;
@@ -214,6 +254,7 @@ async function deleteAll() {
     const snap = await mods.getDocs(mods.collection(root, name));
     snap.forEach((d) => batch.delete(d.ref));
     pushed[name].clear();
+    try { localStorage.removeItem(onServerKey(name, user.uid)); } catch { /* navigation privée */ }
   }
   try {
     await batch.commit();
