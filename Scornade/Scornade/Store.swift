@@ -62,6 +62,11 @@ final class Store: ObservableObject {
 
     // nonisolated : lus depuis decodeAll, qui tourne hors du MainActor.
     private nonisolated static let payloadField = "payload"
+    /// Une fiche supprimée laisse une trace dans la collection des joueurs :
+    /// un document `supprime-<identifiant>`, sans `payload`, que les versions
+    /// précédentes ignorent. Tout appareil qui la voit retire la fiche et
+    /// efface le document qu'un appareil resté en retard aurait renvoyé.
+    private nonisolated static let tombstonePrefix = "supprime-"
     private nonisolated static let updatedAtField = "updatedAt"
 
     private lazy var db = Firestore.firestore()
@@ -83,6 +88,8 @@ final class Store: ObservableObject {
     /// encore. Un instantané parti avant l'effacement arrive parfois après :
     /// sans cette liste, il remettait aussitôt la fiche dans le carnet.
     private var deletedPlayerIDs: Set<UUID> = []
+    /// Fiches supprimées d'après les traces lues sur le serveur.
+    private var tombstonedPlayerIDs: Set<UUID> = []
     private var pushedSessions: [String: String] = [:]
 
     /// Documents que le serveur contenait au dernier instantané, gardés d'un
@@ -176,9 +183,11 @@ final class Store: ObservableObject {
     /// possibles sont effacés.
     private func forgetPlayer(_ id: UUID) {
         deletedPlayerIDs.insert(id)
+        tombstonedPlayerIDs.insert(id)
         for key in [id.uuidString, id.uuidString.lowercased()] where pushedPlayers[key] == nil {
             pushedPlayers[key] = ""
         }
+        writeTombstone(for: id)
     }
 
     // MARK: Sessions
@@ -572,6 +581,7 @@ final class Store: ObservableObject {
         path = NavigationPath()
         pushedPlayers = [:]
         pushedSessions = [:]
+        tombstonedPlayerIDs = []
         serverPlayerIDs = []
         serverSessionIDs = []
         var keys = [userKey]
@@ -652,6 +662,7 @@ final class Store: ObservableObject {
     private func loadSpace() {
         pushedPlayers = [:]
         pushedSessions = [:]
+        tombstonedPlayerIDs = []
         let d = UserDefaults.standard
         serverPlayerIDs = Set(space.flatMap { d.stringArray(forKey: serverIDsKey("players", $0)) } ?? [])
         serverSessionIDs = Set(space.flatMap { d.stringArray(forKey: serverIDsKey("sessions", $0)) } ?? [])
@@ -689,11 +700,29 @@ final class Store: ObservableObject {
         // à jour, c'est le seul signal que le serveur a répondu.
         playersListener = root.collection("players").addSnapshotListener(includeMetadataChanges: true) { [weak self] snap, _ in
             guard let snap else { return }
-            let remote = Self.decodeAll(Player.self, from: snap.documents)
+            let tombstones = Self.tombstones(in: snap.documents)
+            let all = Self.decodeAll(Player.self, from: snap.documents)
+            let remote = all.filter { !tombstones.contains($0.id) }
+            // Un appareil en retard a renvoyé une fiche supprimée : on l'efface.
+            let revived = snap.documents.filter { doc in
+                guard let id = UUID(uuidString: doc.documentID) else { return false }
+                return tombstones.contains(id)
+            }
             let payloads = Self.payloads(of: snap.documents)
+                .filter { key, _ in
+                    guard let id = UUID(uuidString: key) else { return true }
+                    return !tombstones.contains(id)
+                }
             let fromServer = !snap.metadata.isFromCache
+            if !revived.isEmpty {
+                let batch = snap.documents.first!.reference.firestore.batch()
+                revived.forEach { batch.deleteDocument($0.reference) }
+                batch.commit { _ in }
+            }
             Task { @MainActor in
                 guard let self, self.uid == uid else { return }
+                self.tombstonedPlayerIDs.formUnion(tombstones)
+                self.players.removeAll { tombstones.contains($0.id) }
                 if fromServer {
                     let gone = Self.goneElsewhere(known: self.serverPlayerIDs, server: payloads,
                                                   stillThere: Set(remote.map(\.id)))
@@ -729,6 +758,28 @@ final class Store: ObservableObject {
                 if fromServer { self.afterServerSnapshot() }
             }
         }
+    }
+
+    /// Pose la trace de suppression et efface la fiche, tout de suite : sans
+    /// attendre la première lecture du serveur, qui peut tarder.
+    private func writeTombstone(for id: UUID) {
+        guard syncEnabled, let uid else { return }
+        let players = db.collection("users").document(uid).collection("players")
+        let batch = db.batch()
+        batch.setData(["deleted": id.uuidString, Self.updatedAtField: FieldValue.serverTimestamp()],
+                      forDocument: players.document(Self.tombstonePrefix + id.uuidString))
+        batch.deleteDocument(players.document(id.uuidString))
+        batch.deleteDocument(players.document(id.uuidString.lowercased()))
+        batch.commit { _ in }
+    }
+
+    /// Les fiches désignées par une trace de suppression.
+    private nonisolated static func tombstones(in docs: [QueryDocumentSnapshot]) -> Set<UUID> {
+        Set(docs.compactMap { doc in
+            doc.documentID.hasPrefix(tombstonePrefix)
+                ? UUID(uuidString: String(doc.documentID.dropFirst(tombstonePrefix.count)))
+                : nil
+        })
     }
 
     /// Mémorise ce que le serveur contient, puis envoie ce qui n'existe encore
@@ -881,7 +932,9 @@ final class Store: ObservableObject {
         deletedPlayerIDs.formIntersection(remote.map(\.id))
         guard !remote.isEmpty else { return }
         var byID = Dictionary(uniqueKeysWithValues: players.map { ($0.id, $0) })
-        for p in remote where !deletedPlayerIDs.contains(p.id) { byID[p.id] = p }
+        for p in remote where !deletedPlayerIDs.contains(p.id) && !tombstonedPlayerIDs.contains(p.id) {
+            byID[p.id] = p
+        }
         players = Array(byID.values).sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
         saveLocalCacheOnly()
     }
