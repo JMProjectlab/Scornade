@@ -1,0 +1,73 @@
+# Compile l'app iOS sur un Mac de GitHub, à chaque changement du code Swift.
+#
+# Pourquoi : une bonne partie du Swift de Scornade est écrite sans Mac sous la
+# main, donc sans compilateur. Ce contrôle dit, sur chaque PR, si le code
+# compile — avant qu'il n'arrive dans `main`, et non au moment de soumettre
+# une version à l'App Store.
+#
+# Rien n'est signé ni publié : on compile pour le simulateur, sans certificat.
+
+name: Compilation iOS
+
+on:
+  pull_request:
+    paths:
+      - "Scornade/**"
+      - ".github/workflows/ios-build.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Scornade/**"
+      - ".github/workflows/ios-build.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # GoogleService-Info.plist est propre au projet Firebase et reste hors du
+      # dépôt (.gitignore). Le projet Xcode le référence : sans fichier, la
+      # compilation échoue. Un fichier factice suffit pour compiler ; il n'est
+      # jamais publié.
+      - name: Configuration Firebase factice
+        run: |
+          cat > Scornade/Scornade/GoogleService-Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>API_KEY</key><string>factice</string>
+            <key>GCM_SENDER_ID</key><string>0</string>
+            <key>BUNDLE_ID</key><string>com.jmprojectlab.scornade</string>
+            <key>PROJECT_ID</key><string>factice</string>
+            <key>GOOGLE_APP_ID</key><string>1:0:ios:0</string>
+            <key>CLIENT_ID</key><string>factice.apps.googleusercontent.com</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Version de Xcode
+        run: xcodebuild -version && xcodebuild -list -project Scornade/Scornade.xcodeproj
+
+      - name: Compiler l'app
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Scornade/Scornade.xcodeproj \
+            -scheme Scornade \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build.log | grep -E "error:|warning: .*deprecated|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" build.log
+
+      - name: Erreurs de compilation
+        if: failure()
+        run: grep -E "error:" build.log | sort -u | head -100 || true
