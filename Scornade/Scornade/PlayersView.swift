@@ -229,10 +229,13 @@ private struct FusePlayersSheet: View {
     }
 
     /// Le nom seul ne suffit pas à distinguer deux « Manon » : l'e-mail, quand
-    /// il existe, fait la différence.
+    /// il existe, et le nombre de parties font la différence.
     private func label(_ p: Player) -> String {
-        if let email = p.email, !email.isEmpty { return "\(p.name) · \(email)" }
-        return p.name
+        let games = store.sessions.filter { $0.entrants.contains { $0.playerIds.contains(p.id) } }.count
+        var parts = [p.name]
+        if let email = p.email, !email.isEmpty { parts.append(email) }
+        parts.append(games == 1 ? "1 partie" : "\(games) parties")
+        return parts.joined(separator: " · ")
     }
 }
 
