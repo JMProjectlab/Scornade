@@ -46,8 +46,14 @@ const listeners = new Set();
 export const onChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 function emit() { listeners.forEach((fn) => fn()); }
 
+// En majuscules, comme l'app iOS : un même identifiant donne alors le même
+// document Firestore des deux côtés.
 export const uid = () =>
-  (crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  (crypto.randomUUID ? crypto.randomUUID().toUpperCase() : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+/** Fiches supprimées ici que le serveur renvoie encore : un instantané parti
+ *  avant l'effacement ne doit pas les remettre dans le carnet. */
+const deletedPlayerIds = new Set();
 
 // --- Persistance locale ---------------------------------------------------
 
@@ -260,6 +266,7 @@ export function linkInvite(invite, existingId = null) {
 
 export function removePlayer(id) {
   state.players = state.players.filter((p) => p.id !== id);
+  deletedPlayerIds.add(id);
   commit();
 }
 
@@ -282,6 +289,7 @@ export function fusePlayers(duplicateId, keptId) {
   if (!kept.email && dup.email) kept.email = dup.email;
   if (!kept.linkedUid && dup.linkedUid) kept.linkedUid = dup.linkedUid;
   state.players = state.players.filter((p) => p.id !== dup.id);
+  deletedPlayerIds.add(dup.id);
   commit();
 }
 
@@ -432,10 +440,23 @@ export function deleteSession(id) {
  * ne supprime rien : elle peut simplement signifier que l'entrée locale n'a pas
  * encore été poussée.
  */
+/** Retire ce qu'un autre appareil a supprimé du serveur, sans rien renvoyer. */
+export function dropRemoved(name, ids) {
+  if (!ids.length) return;
+  const gone = new Set(ids.map((id) => String(id).toUpperCase()));
+  state[name] = state[name].filter((item) => !gone.has(String(item.id).toUpperCase()));
+  persistLocal();
+  emit();
+}
+
 export function mergeRemote({ players, sessions }) {
+  if (players) {
+    const remoteIds = new Set(players.map((p) => p.id));
+    for (const id of deletedPlayerIds) if (!remoteIds.has(id)) deletedPlayerIds.delete(id);
+  }
   if (players?.length) {
     const byId = new Map(state.players.map((p) => [p.id, p]));
-    players.forEach((p) => byId.set(p.id, p));
+    players.filter((p) => !deletedPlayerIds.has(p.id)).forEach((p) => byId.set(p.id, p));
     state.players = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
   if (sessions?.length) {
