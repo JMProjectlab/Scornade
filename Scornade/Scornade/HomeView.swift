@@ -3,9 +3,15 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject var store: Store
     @State private var filter = "all"
+    @State private var query = ""
 
+    /// Une recherche porte sur tout le catalogue, quelle que soit la catégorie
+    /// choisie : on cherche un jeu par son nom, pas dans un rayon. Casse et
+    /// accents sont ignorés (« molkky » trouve « Mölkky »).
     private var games: [Game] {
-        filter == "all" ? GameCatalog.all : GameCatalog.all.filter { $0.category == filter }
+        let q = query.trimmingCharacters(in: .whitespaces)
+        if !q.isEmpty { return GameCatalog.all.filter { $0.name.localizedStandardContains(q) } }
+        return filter == "all" ? GameCatalog.all : GameCatalog.all.filter { $0.category == filter }
     }
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 12)]
 
@@ -20,16 +26,26 @@ struct HomeView: View {
                         .buttonStyle(.plain)
                     }
 
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 8) {
-                            ForEach(GameCatalog.categories, id: \.key) { cat in
-                                FilterPill(label: cat.label, selected: filter == cat.key) {
-                                    filter = cat.key
+                    // Pendant une recherche, les catégories n'ont plus d'effet : on
+                    // les masque plutôt que d'afficher un filtre ignoré.
+                    if query.isEmpty {
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 8) {
+                                ForEach(GameCatalog.categories, id: \.key) { cat in
+                                    FilterPill(label: cat.label, selected: filter == cat.key) {
+                                        filter = cat.key
+                                    }
                                 }
                             }
                         }
+                        .scrollIndicators(.hidden)
                     }
-                    .scrollIndicators(.hidden)
+
+                    if games.isEmpty {
+                        Text("Aucun jeu ne correspond à « \(query) ».")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity).padding(.top, 24)
+                    }
 
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(games) { game in
@@ -41,6 +57,7 @@ struct HomeView: View {
                 .padding()
             }
             .navigationTitle("Scornade")
+            .searchable(text: $query, prompt: "Rechercher un jeu")
             .nightBackground()
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

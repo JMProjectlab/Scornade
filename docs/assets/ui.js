@@ -116,10 +116,35 @@ function screenLogin() {
   </div>`;
 }
 
+/** Minuscules et sans accents : « molkky » trouve « Mölkky ». */
+const fold = (s) => String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/** Une recherche porte sur tout le catalogue, quelle que soit la catégorie :
+ *  on cherche un jeu par son nom, pas dans un rayon. */
+function applyGameSearch() {
+  const input = document.getElementById("game-search");
+  if (!input) return;
+  const q = fold(input.value.trim());
+  scratch.gameQuery = input.value;
+  const bar = document.querySelector(".pillbar");
+  if (bar) bar.hidden = q !== "";
+  let shown = 0;
+  document.querySelectorAll(".grid-games .gcard").forEach((card) => {
+    const cat = card.dataset.cat;
+    const inFilter = S.state.filter === "all" || cat === S.state.filter;
+    const visible = q ? card.dataset.name.includes(q) : inFilter;
+    card.hidden = !visible;
+    if (visible) shown++;
+  });
+  const empty = document.getElementById("game-search-empty");
+  if (empty) {
+    empty.hidden = shown > 0;
+    empty.textContent = shown ? "" : `Aucun jeu ne correspond à « ${input.value.trim()} ».`;
+  }
+}
+
 function screenHome() {
   const active = S.activeSession();
-  const games = S.state.filter === "all" ? GAMES : GAMES.filter((g) => g.cat === S.state.filter);
-
   let html = "";
   // Son propre code, ouvert une fois connecté : rien à ajouter.
   if (S.state.pendingInvite?.uid === S.state.user?.id) S.state.pendingInvite = null;
@@ -152,13 +177,23 @@ function screenHome() {
       <span class="active-line">${esc(line)}</span></button>`;
   }
 
+  // La recherche filtre les cartes déjà affichées, sans redessiner l'écran :
+  // le champ garde ainsi le focus et le clavier reste ouvert.
+  html += `<input type="search" id="game-search" class="search" placeholder="Rechercher un jeu"
+    aria-label="Rechercher un jeu" autocomplete="off" value="${esc(scratch.gameQuery ?? "")}">`;
+  html += `<p class="hint" id="game-search-empty" hidden></p>`;
+
   html += `<div class="pillbar" role="group" aria-label="Filtrer par catégorie">` +
     CATEGORIES.map(([key, label]) =>
       `<button class="pill" data-act="filter" data-key="${key}"
         aria-pressed="${S.state.filter === key}">${label}</button>`).join("") + `</div>`;
 
-  html += `<div class="grid-games">` + games.map((g) =>
-    `<button class="gcard" data-act="pick-game" data-id="${g.id}">
+  // Tout le catalogue est rendu, la catégorie masque le reste : la recherche
+  // peut ainsi montrer un jeu hors de la catégorie choisie.
+  const inFilter = (g) => S.state.filter === "all" || g.cat === S.state.filter;
+  html += `<div class="grid-games">` + GAMES.map((g) =>
+    `<button class="gcard" data-act="pick-game" data-id="${g.id}" data-cat="${g.cat}"
+      data-name="${esc(fold(g.name))}"${inFilter(g) ? "" : " hidden"}>
       <span class="glyph">${glyph(g.id, 26)}</span>
       <span class="gname">${esc(g.name)}</span>
       <span class="gtype">${g.team ? "Équipe" : "Individuel"}</span></button>`).join("") + `</div>`;
@@ -1013,6 +1048,8 @@ export function render() {
 
   const themeSelect = document.getElementById("theme-select");
   if (themeSelect) themeSelect.value = S.getTheme();
+  // Une synchronisation redessine l'écran : la recherche en cours s'y réapplique.
+  if (scratch.gameQuery) applyGameSearch();
 }
 
 // --- interactions ---------------------------------------------------------
@@ -1300,6 +1337,7 @@ export function bindEvents() {
 
   root.addEventListener("input", (ev) => {
     const el = ev.target;
+    if (el.id === "game-search") { applyGameSearch(); return; }
     const session = currentSession();
 
     if (el.classList.contains("entry")) {

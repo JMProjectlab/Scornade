@@ -180,6 +180,8 @@ button:disabled { opacity: .45; cursor: default; }
 }
 .icon-btn:hover { color: var(--red); }
 
+.search { margin-bottom: 10px; }
+[hidden] { display: none !important; }
 .pillbar { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 14px; scrollbar-width: none; }
 .pillbar::-webkit-scrollbar { display: none; }
 .pill {
@@ -202,7 +204,7 @@ button:disabled { opacity: .45; cursor: default; }
 .chip.suit.red { color: var(--red); }
 .chip.fixed { flex: 0 0 auto; min-width: 46px; }
 
-input[type="text"], input[type="number"], select {
+input[type="text"], input[type="number"], input[type="search"], select {
   font: inherit; font-size: 16px; color: var(--ink); background: var(--bg);
   border: 1px solid var(--hairline); border-radius: 10px; padding: 10px 12px; width: 100%;
 }
