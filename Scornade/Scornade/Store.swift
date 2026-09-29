@@ -60,8 +60,9 @@ final class Store: ObservableObject {
     // un seul appareil à la fois ; le partage à plusieurs demandera un vrai
     // découpage en sous-collection de manches.
 
-    private static let payloadField = "payload"
-    private static let updatedAtField = "updatedAt"
+    // nonisolated : lus depuis decodeAll, qui tourne hors du MainActor.
+    private nonisolated static let payloadField = "payload"
+    private nonisolated static let updatedAtField = "updatedAt"
 
     private lazy var db = Firestore.firestore()
     private var playersListener: ListenerRegistration?
@@ -154,7 +155,7 @@ final class Store: ObservableObject {
 
     @discardableResult
     func createSession(game: Game, entrants: [Entrant], target: Int) -> ScoreSession {
-        let session = ScoreSession(
+        var session = ScoreSession(
             gameId: game.id,
             gameName: game.name,
             symbol: game.symbol,
@@ -165,7 +166,6 @@ final class Store: ObservableObject {
             roundLimit: game.roundLimit > 0 ? game.roundLimit : nil,
             phaseRounds: game.engine == .phaseRace ? [] : nil
         )
-        var session = session
         // Mölkky : les compteurs de ratés naissent avec la partie, comme côté
         // web. Les créer plus tard obligerait chaque lecteur à gérer le cas nil.
         if game.id == "molkky" {

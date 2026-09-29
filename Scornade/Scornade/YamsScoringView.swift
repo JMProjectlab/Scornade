@@ -61,7 +61,7 @@ struct YamsScoringView: View {
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }
-        .onChange(of: allFilled(session)) { filled in
+        .onChange(of: allFilled(session)) { _, filled in
             if filled, !session.manuallyFinished { store.finish(sessionID: sessionID) }
         }
     }

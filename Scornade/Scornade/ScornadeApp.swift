@@ -50,7 +50,7 @@ struct ScornadeApp: App {
                 _ = GIDSignIn.sharedInstance.handle(url)
             }
         }
-        .onChange(of: scenePhase) { phase in
+        .onChange(of: scenePhase) { _, phase in
             if phase == .active { store.reloadFromCloud() }
         }
     }
@@ -82,7 +82,7 @@ private struct ReviewPrompt: ViewModifier {
                 // Les parties déjà terminées avant cette version ne déclenchent rien.
                 if finishedSeen < 0 { finishedSeen = finishedCount }
             }
-            .onChange(of: finishedCount) { count in
+            .onChange(of: finishedCount) { _, count in
                 let isNewFinish = count > finishedSeen
                 finishedSeen = max(finishedSeen, count)
                 guard isNewFinish, count >= 2, askedVersion != appVersion else { return }

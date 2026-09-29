@@ -91,7 +91,7 @@ struct Game421ScoringView: View {
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }
-        .onChange(of: finished(session)) { done in
+        .onChange(of: finished(session)) { _, done in
             if done, !session.manuallyFinished { store.finish(sessionID: sessionID) }
         }
     }
