@@ -59,9 +59,10 @@ jobs:
       - name: Compiler l'app
         run: |
           set -o pipefail
-          # build-for-testing compile l'app ET les cibles de tests, qui
-          # recompilent les mêmes sources avec leurs propres réglages.
-          xcodebuild build-for-testing \
+          # L'app seule. Les cibles de tests recompilent les sources de l'app
+          # sans être liées à Firebase ni à Google Sign-In : elles ne compilent
+          # pas en l'état (constaté le 29/09), à réparer dans le projet Xcode.
+          xcodebuild build \
             -project Scornade/Scornade.xcodeproj \
             -scheme Scornade \
             -destination 'generic/platform=iOS Simulator' \
