@@ -153,11 +153,38 @@ function decode(snapshot) {
 /** Inscrit les documents du serveur dans le registre des envois. Sans ça, une
  *  fiche reçue du serveur puis supprimée ici (fusion, suppression) n'était
  *  jamais effacée côté serveur, et l'instantané suivant la faisait revenir. */
-function remember(snapshot, name) {
+function remember(snapshot, name, skip = new Set()) {
   snapshot.forEach((doc) => {
     const raw = doc.data()?.payload;
-    if (typeof raw === "string") pushed[name].set(doc.id, raw);
+    if (typeof raw === "string" && !skip.has(doc.id.toUpperCase())) pushed[name].set(doc.id, raw);
   });
+}
+
+// Une fiche supprimée laisse une trace dans la collection des joueurs : un
+// document `supprime-<identifiant>`, sans `payload`, que les versions
+// précédentes ignorent. Tout appareil qui la voit retire la fiche et efface
+// le document qu'un appareil resté en retard aurait renvoyé.
+const TOMB = "supprime-";
+
+function tombstones(snapshot) {
+  const out = new Set();
+  snapshot.forEach((doc) => { if (doc.id.startsWith(TOMB)) out.add(doc.id.slice(TOMB.length).toUpperCase()); });
+  return out;
+}
+
+/** Pose la trace et efface la fiche, sans attendre la lecture du serveur. */
+async function forget(id) {
+  const user = auth?.currentUser;
+  if (!user) return;
+  const players = mods.collection(mods.doc(db, "users", user.uid), "players");
+  const upper = String(id).toUpperCase();
+  const batch = mods.writeBatch(db);
+  batch.set(mods.doc(players, TOMB + upper), { deleted: upper, updatedAt: mods.serverTimestamp() });
+  batch.delete(mods.doc(players, upper));
+  batch.delete(mods.doc(players, upper.toLowerCase()));
+  pushed.players.delete(upper);
+  pushed.players.delete(upper.toLowerCase());
+  try { await batch.commit(); } catch { /* Firestore rejouera au retour du réseau */ }
 }
 
 function startListening(userId) {
@@ -172,9 +199,20 @@ function startListening(userId) {
   // Les changements de métadonnées sont écoutés : quand le cache est déjà à
   // jour, c'est le seul signal que le serveur a répondu.
   const listen = (name) => mods.onSnapshot(mods.collection(root, name), { includeMetadataChanges: true }, (snap) => {
-    const items = decode(snap);
+    const tomb = name === "players" ? tombstones(snap) : new Set();
+    const items = decode(snap).filter((i) => !tomb.has(String(i.id).toUpperCase()));
+    if (tomb.size) {
+      dropRemoved(name, [...tomb]);
+      // Un appareil en retard a renvoyé une fiche supprimée : on l'efface.
+      const revived = snap.docs.filter((d) => tomb.has(d.id.toUpperCase()));
+      if (revived.length) {
+        const batch = mods.writeBatch(db);
+        revived.forEach((d) => batch.delete(d.ref));
+        batch.commit().catch(() => {});
+      }
+    }
     if (snap.metadata.fromCache) {
-      remember(snap, name);
+      remember(snap, name, tomb);
       mergeRemote({ [name]: items });
       return;
     }
@@ -185,7 +223,7 @@ function startListening(userId) {
     const gone = [...onServer[name]].filter((id) => !ids.has(id) && !still.has(id.toUpperCase()));
     dropRemoved(name, gone);
     pushed[name].clear();
-    remember(snap, name);
+    remember(snap, name, tomb);
     onServer[name] = ids;
     try { localStorage.setItem(onServerKey(name, userId), JSON.stringify([...ids])); } catch { /* navigation privée */ }
     seen[name] = true;
@@ -200,7 +238,7 @@ function startListening(userId) {
   unsubPlayers = listen("players");
   unsubSessions = listen("sessions");
 
-  state.sync = { push, stop: stopListening, deleteAll };
+  state.sync = { push, stop: stopListening, deleteAll, forget };
 }
 
 /** Arrête la synchronisation du compte — mais pas l'écoute du catalogue, qui ne

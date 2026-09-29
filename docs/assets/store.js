@@ -267,6 +267,7 @@ export function linkInvite(invite, existingId = null) {
 export function removePlayer(id) {
   state.players = state.players.filter((p) => p.id !== id);
   deletedPlayerIds.add(id);
+  state.sync?.forget?.(id);
   commit();
 }
 
@@ -290,6 +291,7 @@ export function fusePlayers(duplicateId, keptId) {
   if (!kept.linkedUid && dup.linkedUid) kept.linkedUid = dup.linkedUid;
   state.players = state.players.filter((p) => p.id !== dup.id);
   deletedPlayerIds.add(dup.id);
+  state.sync?.forget?.(dup.id);
   commit();
 }
 
@@ -444,7 +446,9 @@ export function deleteSession(id) {
 export function dropRemoved(name, ids) {
   if (!ids.length) return;
   const gone = new Set(ids.map((id) => String(id).toUpperCase()));
-  state[name] = state[name].filter((item) => !gone.has(String(item.id).toUpperCase()));
+  const kept = state[name].filter((item) => !gone.has(String(item.id).toUpperCase()));
+  if (kept.length === state[name].length) return;
+  state[name] = kept;
   persistLocal();
   emit();
 }
