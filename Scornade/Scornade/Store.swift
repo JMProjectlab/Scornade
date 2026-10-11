@@ -11,9 +11,39 @@ final class Store: ObservableObject {
     @Published var path = NavigationPath()
     @Published var currentUser: UserAccount?
 
-    private let playersKey = "sm.players"
-    private let sessionsKey = "sm.sessions"
     private let userKey = "sm.user"
+
+    // MARK: Espaces de stockage local
+    //
+    // Un espace par compte, plus un pour le mode sans compte. Avant, tout
+    // vivait sous deux clés communes : en changeant de compte, les joueurs et
+    // les parties du compte précédent restaient en mémoire, puis partaient
+    // sur le serveur du suivant. C'est ce qui recopiait « Manon » d'un compte
+    // Google vers un compte Apple. Désormais, rien ne passe d'un espace à
+    // l'autre sans que l'utilisateur l'ait accepté (voir `resolveGuestImport`).
+
+    private static let guestSpace = "guest"
+    private let legacyPlayersKey = "sm.players"
+    private let legacySessionsKey = "sm.sessions"
+
+    /// L'espace du compte ouvert ; nil tant que personne n'est connecté.
+    private var space: String? {
+        guard let u = currentUser else { return nil }
+        return u.isGuest ? Self.guestSpace : u.id
+    }
+    private func playersKey(_ space: String) -> String { "sm.players.\(space)" }
+    private func sessionsKey(_ space: String) -> String { "sm.sessions.\(space)" }
+    private func declinedImportKey(_ space: String) -> String { "sm.guestImport.declined.\(space)" }
+
+    /// Ce qui existe en mode sans compte et manque au compte qui vient de se
+    /// connecter. Non nil : l'app demande s'il faut l'importer.
+    @Published var pendingGuestImport: GuestImport?
+
+    struct GuestImport: Identifiable {
+        let id = UUID()
+        let players: Int
+        let sessions: Int
+    }
 
     // MARK: Firestore
     //
@@ -30,8 +60,14 @@ final class Store: ObservableObject {
     // un seul appareil à la fois ; le partage à plusieurs demandera un vrai
     // découpage en sous-collection de manches.
 
-    private static let payloadField = "payload"
-    private static let updatedAtField = "updatedAt"
+    // nonisolated : lus depuis decodeAll, qui tourne hors du MainActor.
+    private nonisolated static let payloadField = "payload"
+    /// Une fiche supprimée laisse une trace dans la collection des joueurs :
+    /// un document `supprime-<identifiant>`, sans `payload`, que les versions
+    /// précédentes ignorent. Tout appareil qui la voit retire la fiche et
+    /// efface le document qu'un appareil resté en retard aurait renvoyé.
+    private nonisolated static let tombstonePrefix = "supprime-"
+    private nonisolated static let updatedAtField = "updatedAt"
 
     private lazy var db = Firestore.firestore()
     private var playersListener: ListenerRegistration?
@@ -48,7 +84,27 @@ final class Store: ObservableObject {
     /// Dernier JSON réellement envoyé pour chaque document, pour ne pousser que
     /// ce qui a changé plutôt que la collection entière à chaque sauvegarde.
     private var pushedPlayers: [String: String] = [:]
+    /// Fiches supprimées ici (suppression, fusion) que le serveur renvoie
+    /// encore. Un instantané parti avant l'effacement arrive parfois après :
+    /// sans cette liste, il remettait aussitôt la fiche dans le carnet.
+    private var deletedPlayerIDs: Set<UUID> = []
+    /// Fiches supprimées d'après les traces lues sur le serveur.
+    private var tombstonedPlayerIDs: Set<UUID> = []
     private var pushedSessions: [String: String] = [:]
+
+    /// Documents que le serveur contenait au dernier instantané, gardés d'un
+    /// lancement à l'autre. Un document connu qui disparaît du serveur a été
+    /// supprimé depuis un autre appareil : il est retiré ici aussi, au lieu
+    /// d'être renvoyé au serveur, ce qui le faisait revenir partout.
+    private var serverPlayerIDs: Set<String> = []
+    private var serverSessionIDs: Set<String> = []
+    /// Rien ne part au serveur avant d'avoir appris ce qu'il contient : sinon
+    /// les fiches supprimées ailleurs repartiraient avant d'être reconnues.
+    private var playersSnapshotSeen = false
+    private var sessionsSnapshotSeen = false
+    private var syncReady: Bool { playersSnapshotSeen && sessionsSnapshotSeen }
+    private var initialPushDone = false
+    private func serverIDsKey(_ kind: String, _ space: String) -> String { "sm.onServer.\(kind).\(space)" }
 
     /// La connexion est obligatoire : sans compte Firebase authentifié, il n'y a
     /// rien à synchroniser. Le cache local sert alors de secours hors-ligne.
@@ -63,37 +119,82 @@ final class Store: ObservableObject {
         // Les corrections déjà reçues s'appliquent avant le premier écran :
         // pas de libellé qui change sous les yeux une seconde plus tard.
         GameCatalog.loadCached()
-        if players.isEmpty {
-            players = [
-                Player(name: "Jimmy", colorIndex: 0),
-                Player(name: "Marie", colorIndex: 2),
-                Player(name: "Paul", colorIndex: 1),
-                Player(name: "Sophie", colorIndex: 3),
-            ]
-            saveLocalCacheOnly()
-        }
+        // Le catalogue ne dépend pas du compte : il est commun à tous, et les
+        // règles Firestore le laissent lire sans authentification. L'écouter
+        // ici, et non depuis la synchronisation, est ce qui permet à un
+        // utilisateur « Continuer sans compte » de recevoir les corrections.
+        startCatalogListener()
         startSyncIfSignedIn()
     }
 
     // MARK: Players
 
-    func addPlayer(name: String, email: String?) {
+    @discardableResult
+    func addPlayer(name: String, email: String?, linkedUid: String? = nil) -> Player {
         let used = Set(players.map(\.colorIndex))
         let free = (0..<Palette.pairs.count).first { !used.contains($0) } ?? players.count
-        players.append(Player(name: name, colorIndex: free, email: email))
+        let player = Player(name: name, colorIndex: free, email: email, linkedUid: linkedUid)
+        players.append(player)
         save()
+        return player
+    }
+
+    // MARK: Code joueur
+
+    /// Mon code joueur. Il faut un compte : c'est lui que le code désigne.
+    var myInvite: PlayerInvite? {
+        guard let u = currentUser, !u.isGuest, let uid else { return nil }
+        return PlayerInvite(uid: uid, name: u.name, email: u.email)
+    }
+
+    /// La fiche qui désigne probablement la personne du code scanné : déjà
+    /// reliée à son compte, sinon même e-mail, sinon même nom. Nil : aucune,
+    /// il faudra créer une fiche.
+    func bestMatch(for invite: PlayerInvite) -> Player? {
+        if let p = players.first(where: { $0.linkedUid == invite.uid }) { return p }
+        if let e = invite.email?.lowercased(),
+           let p = players.first(where: { $0.linkedUid == nil && $0.email?.lowercased() == e }) { return p }
+        return players.first {
+            $0.linkedUid == nil && $0.name.localizedCaseInsensitiveCompare(invite.name) == .orderedSame
+        }
+    }
+
+    /// Relie `existing` au compte du code scanné, ou crée une fiche reliée.
+    @discardableResult
+    func link(_ invite: PlayerInvite, to existing: Player?) -> Player {
+        guard let existing, let i = players.firstIndex(where: { $0.id == existing.id }) else {
+            return addPlayer(name: invite.name, email: invite.email, linkedUid: invite.uid)
+        }
+        players[i].linkedUid = invite.uid
+        if players[i].email == nil { players[i].email = invite.email }
+        save()
+        return players[i]
     }
 
     func removePlayer(_ player: Player) {
         players.removeAll { $0.id == player.id }
+        forgetPlayer(player.id)
         save()
+    }
+
+    /// Marque la fiche comme supprimée et force son effacement côté serveur,
+    /// même si ce téléphone ne l'a jamais envoyée. Le site écrit ses
+    /// identifiants en minuscules, l'app en majuscules : les deux documents
+    /// possibles sont effacés.
+    private func forgetPlayer(_ id: UUID) {
+        deletedPlayerIDs.insert(id)
+        tombstonedPlayerIDs.insert(id)
+        for key in [id.uuidString, id.uuidString.lowercased()] where pushedPlayers[key] == nil {
+            pushedPlayers[key] = ""
+        }
+        writeTombstone(for: id)
     }
 
     // MARK: Sessions
 
     @discardableResult
     func createSession(game: Game, entrants: [Entrant], target: Int) -> ScoreSession {
-        let session = ScoreSession(
+        var session = ScoreSession(
             gameId: game.id,
             gameName: game.name,
             symbol: game.symbol,
@@ -104,6 +205,12 @@ final class Store: ObservableObject {
             roundLimit: game.roundLimit > 0 ? game.roundLimit : nil,
             phaseRounds: game.engine == .phaseRace ? [] : nil
         )
+        // Mölkky : les compteurs de ratés naissent avec la partie, comme côté
+        // web. Les créer plus tard obligerait chaque lecteur à gérer le cas nil.
+        if game.id == "molkky" {
+            session.molkkyMisses = Array(repeating: 0, count: entrants.count)
+            session.molkkyOut = Array(repeating: false, count: entrants.count)
+        }
         sessions.insert(session, at: 0)
         save()
         return session
@@ -149,6 +256,16 @@ final class Store: ObservableObject {
         let flags = (0..<n).map { completed.indices.contains($0) && completed[$0] }
         sessions[i].phaseRounds = (sessions[i].phaseRounds ?? []) + [flags]
         sessions[i].rounds.append((0..<n).map { deltas.indices.contains($0) ? deltas[$0] : 0 })
+        save()
+    }
+
+    /// Mölkky : un lancer, ses points et son compteur de ratés.
+    ///
+    /// Les deux s'écrivent ensemble ou pas du tout : une manche enregistrée
+    /// sans son raté laisserait un joueur éliminable à jamais.
+    func addMolkkyThrow(sessionID: UUID, player: Int, delta: Int, missed: Bool) {
+        guard let i = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[i].recordMolkkyThrow(player: player, delta: delta, missed: missed)
         save()
     }
 
@@ -287,6 +404,10 @@ final class Store: ObservableObject {
         // Le tableau vide dit « cette partie suit des phases » ; le mettre à nil
         // ferait retomber Phase 10 sur le décompte ordinaire.
         if s.phaseRounds != nil { s.phaseRounds = [] }
+        if s.molkkyMisses != nil {
+            s.molkkyMisses = Array(repeating: 0, count: s.entrants.count)
+            s.molkkyOut = Array(repeating: false, count: s.entrants.count)
+        }
         s.manuallyFinished = false
         sessions[i] = s
         save()
@@ -320,12 +441,18 @@ final class Store: ObservableObject {
     // MARK: Auth
 
     func signIn(id: String, name: String, email: String?, mode: AuthMode) {
+        stopSync()
         currentUser = UserAccount(id: id, name: name, email: email, mode: mode)
         saveUser()
-        if !players.contains(where: { $0.name == name }) {
-            addPlayer(name: name, email: email)
+        // L'espace de ce compte, et lui seul : rien de l'espace précédent.
+        loadSpace()
+        let myEmail = email?.lowercased()
+        let known = players.contains {
+            $0.name == name || (myEmail != nil && $0.email?.lowercased() == myEmail)
         }
+        if !known { addPlayer(name: name, email: email) }
         startSyncIfSignedIn()
+        offerGuestImport()
     }
 
     /// Ouvre une session locale, sans compte : l'application est utilisable
@@ -334,8 +461,7 @@ final class Store: ObservableObject {
     /// réseau.
     ///
     /// Les parties créées ici ne sont pas perdues si l'utilisateur se connecte
-    /// plus tard : `startSyncIfSignedIn()` termine par `pushChanges()`, qui
-    /// envoie ce qui existe déjà en local.
+    /// plus tard : la connexion propose de les importer dans le compte.
     func continueAsGuest() {
         guard currentUser == nil else { return }
         currentUser = UserAccount(id: UUID().uuidString,
@@ -343,13 +469,101 @@ final class Store: ObservableObject {
                                   email: nil,
                                   mode: .guest)
         saveUser()
+        loadSpace()
     }
 
+    /// Ferme le compte sans rien effacer : ses données restent dans son espace
+    /// sur l'appareil et reviendront à la prochaine connexion. Elles quittent
+    /// seulement la mémoire, pour que le compte suivant ne les voie pas.
     func signOut() {
         stopSync()
         try? Auth.auth().signOut()
         currentUser = nil
         UserDefaults.standard.removeObject(forKey: userKey)
+        path = NavigationPath()
+        pendingGuestImport = nil
+        loadSpace()
+    }
+
+    // MARK: Import des données sans compte
+
+    private func offerGuestImport() {
+        guard let space, space != Self.guestSpace,
+              !UserDefaults.standard.bool(forKey: declinedImportKey(space)) else { return }
+        let (guestPlayers, guestSessions) = readSpace(Self.guestSpace)
+        let newPlayers = guestPlayers.filter { g in !players.contains { $0.id == g.id } }
+        let newSessions = guestSessions.filter { g in !sessions.contains { $0.id == g.id } }
+        guard !newPlayers.isEmpty || !newSessions.isEmpty else { return }
+        pendingGuestImport = GuestImport(players: newPlayers.count, sessions: newSessions.count)
+    }
+
+    /// Accepté : les joueurs et parties sans compte rejoignent le compte, puis
+    /// quittent le mode sans compte. Un joueur qui porte le même nom qu'un
+    /// joueur du compte est la même personne : ses parties passent sur la fiche
+    /// du compte au lieu de créer un doublon. Refusé : rien ne bouge, et la
+    /// question n'est plus posée pour ce compte.
+    func resolveGuestImport(accept: Bool) {
+        pendingGuestImport = nil
+        guard let space, space != Self.guestSpace else { return }
+        guard accept else {
+            UserDefaults.standard.set(true, forKey: declinedImportKey(space))
+            return
+        }
+        let (guestPlayers, guestSessions) = readSpace(Self.guestSpace)
+
+        var remap: [UUID: UUID] = [:]
+        var merged = players
+        for g in guestPlayers where !merged.contains(where: { $0.id == g.id }) {
+            if let same = merged.first(where: { $0.name.localizedCaseInsensitiveCompare(g.name) == .orderedSame }) {
+                remap[g.id] = same.id
+            } else {
+                merged.append(g)
+            }
+        }
+        var mergedSessions = sessions
+        for var g in guestSessions where !mergedSessions.contains(where: { $0.id == g.id }) {
+            for j in g.entrants.indices {
+                g.entrants[j].playerIds = g.entrants[j].playerIds.map { remap[$0] ?? $0 }
+            }
+            mergedSessions.append(g)
+        }
+        players = merged.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+        sessions = mergedSessions.sorted { $0.date > $1.date }
+        save()
+
+        UserDefaults.standard.removeObject(forKey: playersKey(Self.guestSpace))
+        UserDefaults.standard.removeObject(forKey: sessionsKey(Self.guestSpace))
+    }
+
+    // MARK: Fusion de deux fiches
+
+    /// Deux fiches qui désignent la même personne (« Manon » saisie deux fois)
+    /// n'en font plus qu'une : les parties de `duplicate` passent sur `kept`,
+    /// puis `duplicate` est supprimée. Les statistiques suivent, puisqu'elles
+    /// se calculent sur les identifiants des joueurs de chaque partie.
+    func fusePlayer(_ duplicate: Player, into kept: Player) {
+        guard duplicate.id != kept.id else { return }
+        for i in sessions.indices {
+            for j in sessions[i].entrants.indices
+            where sessions[i].entrants[j].playerIds.contains(duplicate.id) {
+                var ids: [UUID] = []
+                for id in sessions[i].entrants[j].playerIds {
+                    let target = id == duplicate.id ? kept.id : id
+                    if !ids.contains(target) { ids.append(target) }
+                }
+                sessions[i].entrants[j].playerIds = ids
+                if sessions[i].entrants[j].name == duplicate.name {
+                    sessions[i].entrants[j].name = kept.name
+                }
+            }
+        }
+        if let k = players.firstIndex(where: { $0.id == kept.id }) {
+            if players[k].email == nil { players[k].email = duplicate.email }
+            if players[k].linkedUid == nil { players[k].linkedUid = duplicate.linkedUid }
+        }
+        players.removeAll { $0.id == duplicate.id }
+        forgetPlayer(duplicate.id)
+        save()
     }
 
     /// Efface toutes les données de l'utilisateur : joueurs, parties et compte,
@@ -357,6 +571,7 @@ final class Store: ObservableObject {
     func deleteAllData() {
         let ids = (players.map(\.id.uuidString), sessions.map(\.id.uuidString))
         let wasSyncing = syncEnabled
+        let spaceToErase = space
         let user = Auth.auth().currentUser
 
         stopSync()
@@ -366,7 +581,15 @@ final class Store: ObservableObject {
         path = NavigationPath()
         pushedPlayers = [:]
         pushedSessions = [:]
-        for key in [playersKey, sessionsKey, userKey] {
+        tombstonedPlayerIDs = []
+        serverPlayerIDs = []
+        serverSessionIDs = []
+        var keys = [userKey]
+        if let erased = spaceToErase {
+            keys += [playersKey(erased), sessionsKey(erased),
+                     serverIDsKey("players", erased), serverIDsKey("sessions", erased)]
+        }
+        for key in keys {
             UserDefaults.standard.removeObject(forKey: key)
         }
 
@@ -399,29 +622,66 @@ final class Store: ObservableObject {
     }
 
     private func saveLocalCacheOnly() {
+        guard let space else { return }
         let enc = JSONEncoder()
         if let p = try? enc.encode(players) {
-            UserDefaults.standard.set(p, forKey: playersKey)
+            UserDefaults.standard.set(p, forKey: playersKey(space))
         }
         if let s = try? enc.encode(sessions) {
-            UserDefaults.standard.set(s, forKey: sessionsKey)
+            UserDefaults.standard.set(s, forKey: sessionsKey(space))
         }
     }
 
     private func load() {
-        let dec = JSONDecoder()
-        if let p = UserDefaults.standard.data(forKey: playersKey),
-           let decoded = try? dec.decode([Player].self, from: p) {
-            players = decoded
-        }
-        if let s = UserDefaults.standard.data(forKey: sessionsKey),
-           let decoded = try? dec.decode([ScoreSession].self, from: s) {
-            sessions = decoded
-        }
         if let u = UserDefaults.standard.data(forKey: userKey),
-           let decoded = try? dec.decode(UserAccount.self, from: u) {
+           let decoded = try? JSONDecoder().decode(UserAccount.self, from: u) {
             currentUser = decoded
         }
+        migrateLegacyCache()
+        loadSpace()
+    }
+
+    /// Avant la séparation par compte, tout vivait sous deux clés communes. Ce
+    /// contenu va à l'espace du compte ouvert (c'est ce qu'il affichait), ou au
+    /// mode sans compte si personne n'est connecté. Il n'est copié nulle part
+    /// ailleurs, puis les anciennes clés disparaissent.
+    private func migrateLegacyCache() {
+        let d = UserDefaults.standard
+        guard d.data(forKey: legacyPlayersKey) != nil || d.data(forKey: legacySessionsKey) != nil else { return }
+        let target = space ?? Self.guestSpace
+        for (old, new) in [(legacyPlayersKey, playersKey(target)), (legacySessionsKey, sessionsKey(target))] {
+            if let data = d.data(forKey: old), d.data(forKey: new) == nil {
+                d.set(data, forKey: new)
+            }
+            d.removeObject(forKey: old)
+        }
+    }
+
+    /// Remplace les données en mémoire par celles de l'espace courant (vide si
+    /// personne n'est connecté).
+    private func loadSpace() {
+        pushedPlayers = [:]
+        pushedSessions = [:]
+        tombstonedPlayerIDs = []
+        let d = UserDefaults.standard
+        serverPlayerIDs = Set(space.flatMap { d.stringArray(forKey: serverIDsKey("players", $0)) } ?? [])
+        serverSessionIDs = Set(space.flatMap { d.stringArray(forKey: serverIDsKey("sessions", $0)) } ?? [])
+        guard let space else {
+            players = []
+            sessions = []
+            return
+        }
+        let (p, s) = readSpace(space)
+        players = p
+        sessions = s
+    }
+
+    private func readSpace(_ space: String) -> ([Player], [ScoreSession]) {
+        let d = UserDefaults.standard
+        let dec = JSONDecoder()
+        let p = d.data(forKey: playersKey(space)).flatMap { try? dec.decode([Player].self, from: $0) } ?? []
+        let s = d.data(forKey: sessionsKey(space)).flatMap { try? dec.decode([ScoreSession].self, from: $0) } ?? []
+        return (p, s)
     }
 
     // MARK: Synchronisation Firestore
@@ -431,57 +691,186 @@ final class Store: ObservableObject {
         guard syncEnabled, let uid else { return }
         let root = db.collection("users").document(uid)
 
-        playersListener = root.collection("players").addSnapshotListener { [weak self] snap, _ in
+        // Un instantané parti avant un changement de compte peut arriver après :
+        // il ne s'applique que si le compte qui l'a demandé est toujours ouvert.
+        playersSnapshotSeen = false
+        sessionsSnapshotSeen = false
+        initialPushDone = false
+        // Les changements de métadonnées sont écoutés : quand le cache est déjà
+        // à jour, c'est le seul signal que le serveur a répondu.
+        playersListener = root.collection("players").addSnapshotListener(includeMetadataChanges: true) { [weak self] snap, _ in
             guard let snap else { return }
-            let remote = Self.decodeAll(Player.self, from: snap.documents)
-            Task { @MainActor in self?.mergePlayers(remote) }
-        }
-        sessionsListener = root.collection("sessions").addSnapshotListener { [weak self] snap, _ in
-            guard let snap else { return }
-            let remote = Self.decodeAll(ScoreSession.self, from: snap.documents)
-            Task { @MainActor in self?.mergeSessions(remote) }
-        }
-
-        // Le catalogue est commun à tous les comptes : il est en lecture seule,
-        // et c'est lui qui permet de corriger une règle sans publier une
-        // nouvelle version. Une collection vide est le cas normal.
-        catalogListener = db.collection("games").addSnapshotListener { [weak self] snap, _ in
-            guard let snap else { return }
-            let overrides = Self.decodeOverrides(snap.documents)
+            let tombstones = Self.tombstones(in: snap.documents)
+            let all = Self.decodeAll(Player.self, from: snap.documents)
+            let remote = all.filter { !tombstones.contains($0.id) }
+            // Un appareil en retard a renvoyé une fiche supprimée : on l'efface.
+            let revived = snap.documents.filter { doc in
+                guard let id = UUID(uuidString: doc.documentID) else { return false }
+                return tombstones.contains(id)
+            }
+            let payloads = Self.payloads(of: snap.documents)
+                .filter { key, _ in
+                    guard let id = UUID(uuidString: key) else { return true }
+                    return !tombstones.contains(id)
+                }
+            let fromServer = !snap.metadata.isFromCache
+            if !revived.isEmpty {
+                let batch = snap.documents.first!.reference.firestore.batch()
+                revived.forEach { batch.deleteDocument($0.reference) }
+                batch.commit { _ in }
+            }
             Task { @MainActor in
-                guard let self else { return }
-                GameCatalog.cache(overrides)
-                if GameCatalog.apply(overrides) { self.catalogRevision += 1 }
+                guard let self, self.uid == uid else { return }
+                self.tombstonedPlayerIDs.formUnion(tombstones)
+                self.players.removeAll { tombstones.contains($0.id) }
+                if fromServer {
+                    let gone = Self.goneElsewhere(known: self.serverPlayerIDs, server: payloads,
+                                                  stillThere: Set(remote.map(\.id)))
+                    self.players.removeAll { gone.contains($0.id) }
+                    self.pushedPlayers = payloads
+                    self.serverPlayerIDs = Set(payloads.keys)
+                    self.playersSnapshotSeen = true
+                } else {
+                    self.pushedPlayers.merge(payloads) { _, server in server }
+                }
+                self.mergePlayers(remote)
+                if fromServer { self.afterServerSnapshot() }
             }
         }
+        sessionsListener = root.collection("sessions").addSnapshotListener(includeMetadataChanges: true) { [weak self] snap, _ in
+            guard let snap else { return }
+            let remote = Self.decodeAll(ScoreSession.self, from: snap.documents)
+            let payloads = Self.payloads(of: snap.documents)
+            let fromServer = !snap.metadata.isFromCache
+            Task { @MainActor in
+                guard let self, self.uid == uid else { return }
+                if fromServer {
+                    let gone = Self.goneElsewhere(known: self.serverSessionIDs, server: payloads,
+                                                  stillThere: Set(remote.map(\.id)))
+                    self.sessions.removeAll { gone.contains($0.id) }
+                    self.pushedSessions = payloads
+                    self.serverSessionIDs = Set(payloads.keys)
+                    self.sessionsSnapshotSeen = true
+                } else {
+                    self.pushedSessions.merge(payloads) { _, server in server }
+                }
+                self.mergeSessions(remote)
+                if fromServer { self.afterServerSnapshot() }
+            }
+        }
+    }
 
-        // Ce qui existe déjà en local et pas encore côté serveur part au premier envoi.
+    /// Pose la trace de suppression et efface la fiche, tout de suite : sans
+    /// attendre la première lecture du serveur, qui peut tarder.
+    private func writeTombstone(for id: UUID) {
+        guard syncEnabled, let uid else { return }
+        let players = db.collection("users").document(uid).collection("players")
+        let batch = db.batch()
+        batch.setData(["deleted": id.uuidString, Self.updatedAtField: FieldValue.serverTimestamp()],
+                      forDocument: players.document(Self.tombstonePrefix + id.uuidString))
+        batch.deleteDocument(players.document(id.uuidString))
+        batch.deleteDocument(players.document(id.uuidString.lowercased()))
+        batch.commit { _ in }
+    }
+
+    /// Les fiches désignées par une trace de suppression.
+    private nonisolated static func tombstones(in docs: [QueryDocumentSnapshot]) -> Set<UUID> {
+        Set(docs.compactMap { doc in
+            doc.documentID.hasPrefix(tombstonePrefix)
+                ? UUID(uuidString: String(doc.documentID.dropFirst(tombstonePrefix.count)))
+                : nil
+        })
+    }
+
+    /// Mémorise ce que le serveur contient, puis envoie ce qui n'existe encore
+    /// qu'ici : le premier envoi n'a lieu qu'une fois les deux collections lues.
+    private func afterServerSnapshot() {
+        saveLocalCacheOnly()
+        if let space {
+            let d = UserDefaults.standard
+            d.set(Array(serverPlayerIDs), forKey: serverIDsKey("players", space))
+            d.set(Array(serverSessionIDs), forKey: serverIDsKey("sessions", space))
+        }
+        // Une seule fois : l'app et le site n'écrivent pas le JSON à
+        // l'identique, et renvoyer après chaque instantané les ferait se
+        // répondre sans fin.
+        guard syncReady, !initialPushDone else { return }
+        initialPushDone = true
         pushChanges()
+    }
+
+    /// Ce qui a disparu du serveur alors que ce téléphone l'y avait vu : effacé
+    /// depuis un autre appareil. Un même identifiant peut exister sous deux
+    /// écritures (majuscules pour l'app, minuscules pour le site) ; tant que
+    /// l'une des deux reste, rien n'est retiré.
+    private nonisolated static func goneElsewhere(known: Set<String>, server: [String: String],
+                                                  stillThere: Set<UUID>) -> Set<UUID> {
+        Set(known.filter { server[$0] == nil }.compactMap(UUID.init(uuidString:)))
+            .subtracting(stillThere)
+    }
+
+    /// Écoute les corrections du catalogue, avec ou sans compte.
+    ///
+    /// C'est en lecture seule, et la collection est la même pour tout le monde :
+    /// il n'y a donc rien à attendre d'une connexion. Une collection vide est le
+    /// cas normal, le catalogue embarqué s'applique alors tel quel.
+    private func startCatalogListener() {
+        guard FirebaseSupport.isAvailable, catalogListener == nil else { return }
+        catalogListener = db.collection("games").addSnapshotListener { [weak self] snap, _ in
+            guard let snap else { return }
+            let entries = Self.decodeCatalog(snap.documents)
+            Task { @MainActor in
+                guard let self else { return }
+                GameCatalog.cache(entries)
+                if GameCatalog.apply(entries) { self.catalogRevision += 1 }
+            }
+        }
     }
 
     /// Les documents `games/{id}` sont des dictionnaires plats, pas le JSON
     /// encapsulé qu'on utilise pour les joueurs et les parties : ils sont
     /// rédigés à la main dans la console, autant qu'ils y soient lisibles.
-    private nonisolated static func decodeOverrides(
+    ///
+    /// Rien n'est validé ici : un champ absent ou du mauvais type devient `nil`,
+    /// et c'est `GameCatalog.apply` qui décide de ce qui est acceptable.
+    private nonisolated static func decodeCatalog(
         _ docs: [QueryDocumentSnapshot]
-    ) -> [String: GameCatalog.Override] {
-        var out: [String: GameCatalog.Override] = [:]
+    ) -> [String: GameCatalog.Entry] {
+        var out: [String: GameCatalog.Entry] = [:]
         for doc in docs {
             let d = doc.data()
-            out[doc.documentID] = GameCatalog.Override(
+            out[doc.documentID] = GameCatalog.Entry(
                 name: d["name"] as? String,
                 rules: d["rules"] as? String,
                 category: d["category"] as? String,
-                defaultTarget: (d["defaultTarget"] as? NSNumber)?.intValue
+                defaultTarget: (d["defaultTarget"] as? NSNumber)?.intValue,
+                engine: d["engine"] as? String,
+                isTeamGame: d["isTeamGame"] as? Bool,
+                higherWins: d["higherWins"] as? Bool,
+                roundLimit: (d["roundLimit"] as? NSNumber)?.intValue,
+                symbol: d["symbol"] as? String
             )
         }
         return out
     }
 
+    /// Arrête la synchronisation du compte — mais pas l'écoute du catalogue,
+    /// qui ne dépend d'aucun compte et survit donc à la déconnexion.
     private func stopSync() {
         playersListener?.remove(); playersListener = nil
         sessionsListener?.remove(); sessionsListener = nil
-        catalogListener?.remove(); catalogListener = nil
+    }
+
+    /// Ce que le serveur contient, document par document. Ces documents
+    /// entrent dans le registre des envois : sans ça, une fiche reçue du
+    /// serveur puis supprimée ici (fusion, suppression) n'était jamais effacée
+    /// côté serveur, et l'instantané suivant la faisait réapparaître.
+    private nonisolated static func payloads(of docs: [QueryDocumentSnapshot]) -> [String: String] {
+        var out: [String: String] = [:]
+        for doc in docs {
+            if let json = doc[payloadField] as? String { out[doc.documentID] = json }
+        }
+        return out
     }
 
     private nonisolated static func decodeAll<T: Decodable>(_ type: T.Type,
@@ -497,7 +886,7 @@ final class Store: ObservableObject {
     /// N'envoie que les documents dont le JSON a changé, et supprime ceux qui ont
     /// disparu localement.
     private func pushChanges() {
-        guard syncEnabled, let uid else { return }
+        guard syncEnabled, syncReady, let uid else { return }
         let root = db.collection("users").document(uid)
         let enc = JSONEncoder()
 
@@ -539,9 +928,13 @@ final class Store: ObservableObject {
     /// Fusionne sans jamais supprimer localement : une absence côté serveur peut
     /// simplement signifier que l'entrée locale n'a pas encore été poussée.
     private func mergePlayers(_ remote: [Player]) {
+        // Une fiche supprimée reste écartée tant que le serveur la renvoie.
+        deletedPlayerIDs.formIntersection(remote.map(\.id))
         guard !remote.isEmpty else { return }
         var byID = Dictionary(uniqueKeysWithValues: players.map { ($0.id, $0) })
-        for p in remote { byID[p.id] = p }
+        for p in remote where !deletedPlayerIDs.contains(p.id) && !tombstonedPlayerIDs.contains(p.id) {
+            byID[p.id] = p
+        }
         players = Array(byID.values).sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
         saveLocalCacheOnly()
     }

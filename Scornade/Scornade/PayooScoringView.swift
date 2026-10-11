@@ -49,6 +49,7 @@ struct PayooScoringView: View {
             .padding()
         }
         .navigationTitle(session.gameName)
+        .nightBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -130,8 +131,8 @@ struct PayooScoringView: View {
             .disabled(sum != roundTotal)
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(.separator), lineWidth: 0.5))
+        .background(Color.cloud.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.hairline, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 

@@ -57,6 +57,7 @@ struct RoundEditorSheet: View {
                 }
             }
             .navigationTitle("Manche \(roundNumber)")
+            .nightBackground()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

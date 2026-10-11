@@ -6,7 +6,7 @@
 // sérialisé en JSON dans un champ `payload` — pour que les deux clients lisent
 // et écrivent les mêmes données.
 
-import { mergeRemote, setUser, state } from "./store.js";
+import { dropRemoved, mergeRemote, setUser, state } from "./store.js";
 import { applyCatalogOverrides, cacheCatalog } from "./data.js";
 
 const SDK = "https://www.gstatic.com/firebasejs/10.12.2";
@@ -18,6 +18,20 @@ let db = null;
 let unsubPlayers = null;
 let unsubSessions = null;
 const pushed = { players: new Map(), sessions: new Map() };
+// Documents que le serveur contenait au dernier instantané, gardés d'une visite
+// à l'autre. Un document connu qui disparaît du serveur a été supprimé depuis
+// un autre appareil : il est retiré ici aussi, au lieu d'être renvoyé au
+// serveur, ce qui le faisait revenir partout.
+let onServer = { players: new Set(), sessions: new Set() };
+// Rien ne part au serveur avant d'avoir appris ce qu'il contient.
+let seen = { players: false, sessions: false };
+let listeningUid = null;
+let initialPushDone = false;
+const onServerKey = (name, userId) => `sm.onServer.${name}.${userId}`;
+
+function readIds(key) {
+  try { return new Set(JSON.parse(localStorage.getItem(key) || "[]")); } catch { return new Set(); }
+}
 
 /** Lit la configuration si elle a été déposée à côté. */
 async function loadConfig() {
@@ -52,6 +66,12 @@ export async function initFirebase() {
     // Plusieurs onglets ouverts, ou navigateur sans IndexedDB : sans gravité.
   }
 
+  // Le catalogue ne dépend pas du compte : il est commun à tous, et les règles
+  // Firestore le laissent lire sans authentification. L'écouter ici, et non
+  // depuis la branche connectée, est ce qui permet à un visiteur sans compte de
+  // recevoir les corrections.
+  watchCatalog();
+
   authMod.onAuthStateChanged(auth, (user) => {
     if (user) {
       setUser({
@@ -61,7 +81,6 @@ export async function initFirebase() {
         mode: user.providerData[0]?.providerId === "apple.com" ? "apple" : "google",
       });
       startListening(user.uid);
-      watchCatalog();
     } else {
       stopListening();
       setUser(null);
@@ -83,7 +102,9 @@ let unsubCatalog = null;
  * normal : le catalogue embarqué s'applique alors tel quel.
  *
  * Les règles Firestore interdisent l'écriture depuis le client, donc ce flux
- * est à sens unique — l'application lit, la console corrige.
+ * est à sens unique — l'application lit, la console corrige. La lecture, elle,
+ * est ouverte sans authentification : il n'y a rien à attendre d'une connexion
+ * pour une collection identique pour tout le monde.
  */
 function watchCatalog() {
   unsubCatalog?.();
@@ -129,31 +150,108 @@ function decode(snapshot) {
   return out;
 }
 
+/** Inscrit les documents du serveur dans le registre des envois. Sans ça, une
+ *  fiche reçue du serveur puis supprimée ici (fusion, suppression) n'était
+ *  jamais effacée côté serveur, et l'instantané suivant la faisait revenir. */
+function remember(snapshot, name, skip = new Set()) {
+  snapshot.forEach((doc) => {
+    const raw = doc.data()?.payload;
+    if (typeof raw === "string" && !skip.has(doc.id.toUpperCase())) pushed[name].set(doc.id, raw);
+  });
+}
+
+// Une fiche supprimée laisse une trace dans la collection des joueurs : un
+// document `supprime-<identifiant>`, sans `payload`, que les versions
+// précédentes ignorent. Tout appareil qui la voit retire la fiche et efface
+// le document qu'un appareil resté en retard aurait renvoyé.
+const TOMB = "supprime-";
+
+function tombstones(snapshot) {
+  const out = new Set();
+  snapshot.forEach((doc) => { if (doc.id.startsWith(TOMB)) out.add(doc.id.slice(TOMB.length).toUpperCase()); });
+  return out;
+}
+
+/** Pose la trace et efface la fiche, sans attendre la lecture du serveur. */
+async function forget(id) {
+  const user = auth?.currentUser;
+  if (!user) return;
+  const players = mods.collection(mods.doc(db, "users", user.uid), "players");
+  const upper = String(id).toUpperCase();
+  const batch = mods.writeBatch(db);
+  batch.set(mods.doc(players, TOMB + upper), { deleted: upper, updatedAt: mods.serverTimestamp() });
+  batch.delete(mods.doc(players, upper));
+  batch.delete(mods.doc(players, upper.toLowerCase()));
+  pushed.players.delete(upper);
+  pushed.players.delete(upper.toLowerCase());
+  try { await batch.commit(); } catch { /* Firestore rejouera au retour du réseau */ }
+}
+
 function startListening(userId) {
   stopListening();
   const root = mods.doc(db, "users", userId);
 
-  unsubPlayers = mods.onSnapshot(mods.collection(root, "players"), (snap) => {
-    mergeRemote({ players: decode(snap) });
-  });
-  unsubSessions = mods.onSnapshot(mods.collection(root, "sessions"), (snap) => {
-    mergeRemote({ sessions: decode(snap) });
-  });
+  listeningUid = userId;
+  onServer = { players: readIds(onServerKey("players", userId)), sessions: readIds(onServerKey("sessions", userId)) };
+  seen = { players: false, sessions: false };
+  initialPushDone = false;
 
-  state.sync = { push, stop: stopListening, deleteAll };
-  push(state);
+  // Les changements de métadonnées sont écoutés : quand le cache est déjà à
+  // jour, c'est le seul signal que le serveur a répondu.
+  const listen = (name) => mods.onSnapshot(mods.collection(root, name), { includeMetadataChanges: true }, (snap) => {
+    const tomb = name === "players" ? tombstones(snap) : new Set();
+    const items = decode(snap).filter((i) => !tomb.has(String(i.id).toUpperCase()));
+    if (tomb.size) {
+      dropRemoved(name, [...tomb]);
+      // Un appareil en retard a renvoyé une fiche supprimée : on l'efface.
+      const revived = snap.docs.filter((d) => tomb.has(d.id.toUpperCase()));
+      if (revived.length) {
+        const batch = mods.writeBatch(db);
+        revived.forEach((d) => batch.delete(d.ref));
+        batch.commit().catch(() => {});
+      }
+    }
+    if (snap.metadata.fromCache) {
+      remember(snap, name, tomb);
+      mergeRemote({ [name]: items });
+      return;
+    }
+    // Un même identifiant peut exister en majuscules (app) et en minuscules
+    // (site) : tant que l'une des deux écritures reste, rien n'est retiré.
+    const ids = new Set(snap.docs.map((d) => d.id));
+    const still = new Set(items.map((i) => String(i.id).toUpperCase()));
+    const gone = [...onServer[name]].filter((id) => !ids.has(id) && !still.has(id.toUpperCase()));
+    dropRemoved(name, gone);
+    pushed[name].clear();
+    remember(snap, name, tomb);
+    onServer[name] = ids;
+    try { localStorage.setItem(onServerKey(name, userId), JSON.stringify([...ids])); } catch { /* navigation privée */ }
+    seen[name] = true;
+    mergeRemote({ [name]: items });
+    // Une seule fois : l'app et le site n'écrivent pas le JSON à l'identique,
+    // et renvoyer après chaque instantané les ferait se répondre sans fin.
+    if (seen.players && seen.sessions && !initialPushDone) {
+      initialPushDone = true;
+      push(state);
+    }
+  });
+  unsubPlayers = listen("players");
+  unsubSessions = listen("sessions");
+
+  state.sync = { push, stop: stopListening, deleteAll, forget };
 }
 
+/** Arrête la synchronisation du compte — mais pas l'écoute du catalogue, qui ne
+ *  dépend d'aucun compte et survit donc à la déconnexion. */
 function stopListening() {
   unsubPlayers?.(); unsubPlayers = null;
   unsubSessions?.(); unsubSessions = null;
-  unsubCatalog?.(); unsubCatalog = null;
 }
 
 /** N'écrit que les documents dont le JSON a changé depuis le dernier envoi. */
 async function push(current) {
   const user = auth?.currentUser;
-  if (!user) return;
+  if (!user || user.uid !== listeningUid || !seen.players || !seen.sessions) return;
   const root = mods.doc(db, "users", user.uid);
   const batch = mods.writeBatch(db);
   let writes = 0;
@@ -194,6 +292,7 @@ async function deleteAll() {
     const snap = await mods.getDocs(mods.collection(root, name));
     snap.forEach((d) => batch.delete(d.ref));
     pushed[name].clear();
+    try { localStorage.removeItem(onServerKey(name, user.uid)); } catch { /* navigation privée */ }
   }
   try {
     await batch.commit();

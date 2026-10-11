@@ -24,7 +24,7 @@
  * `VERSION` qui purge l'ancien cache.
  */
 
-const VERSION = "scornade-v1";
+const VERSION = "scornade-v2";
 const SHELL = [
   "./",
   "./index.html",
@@ -37,6 +37,9 @@ const SHELL = [
   "./assets/charts.js",
   "./assets/firebase.js",
   "./assets/firebase-config.js",
+  "./assets/vendor/qrcode.mjs",
+  "./assets/img/icone.svg",
+  "./assets/img/apple-touch-icon.png",
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png",
   "./assets/icons/icon-maskable-512.png",

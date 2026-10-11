@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3B1D8F"/><stop offset="0.5" stop-color="#5B1A8C"/><stop offset="1" stop-color="#1A0B3D"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.52" cy="0.55" r="0.55">
+      <stop offset="0" stop-color="#FF6A00" stop-opacity="0.6"/><stop offset="1" stop-color="#FF2D55" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="wide" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF8A00"/><stop offset="1" stop-color="#FF1F4B"/>
+    </linearGradient>
+    <linearGradient id="tight" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFD000"/><stop offset="1" stop-color="#FF5A1F"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE14D"/><stop offset="1" stop-color="#FF7A00"/>
+    </linearGradient>
+    <filter id="bw" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="50"/></filter>
+    <filter id="bt" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="16"/></filter>
+    <filter id="sh" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+    <path id="heart" d="M0,-30 C-8,-58 -60,-58 -60,-18 C-60,14 -24,38 0,62 C24,38 60,14 60,-18 C60,-58 8,-58 0,-30 Z"/>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <rect width="1024" height="1024" fill="url(#halo)"/>
+  <g filter="url(#bw)" fill="url(#wide)" opacity="1" transform="translate(512 540) scale(1.12) translate(-512 -540)">
+  <g transform="translate(355 480) rotate(-12)"><rect x="-160" y="-220" width="320" height="440" rx="50"/></g>
+  <g transform="translate(675 385) rotate(14)"><rect x="-150" y="-150" width="300" height="300" rx="68"/></g>
+  <g transform="translate(640 725)"><circle r="170"/></g></g>
+  <g filter="url(#bt)" fill="url(#tight)" opacity="0.9" transform="translate(512 540) scale(1.04) translate(-512 -540)">
+  <g transform="translate(355 480) rotate(-12)"><rect x="-160" y="-220" width="320" height="440" rx="50"/></g>
+  <g transform="translate(675 385) rotate(14)"><rect x="-150" y="-150" width="300" height="300" rx="68"/></g>
+  <g transform="translate(640 725)"><circle r="170"/></g></g>
+  <g transform="translate(355 480) rotate(-12)" filter="url(#sh)">
+    <rect x="-160" y="-220" width="320" height="440" rx="50" fill="#FFFFFF"/>
+    <use href="#heart" transform="scale(1.45)" fill="#FF2D55"/>
+  </g>
+  <g transform="translate(675 385) rotate(14)" filter="url(#sh)">
+    <rect x="-150" y="-150" width="300" height="300" rx="68" fill="url(#sun)"/>
+    <g fill="#140F2E"><circle cx="-64" cy="-64" r="27"/><circle cx="64" cy="-64" r="27"/><circle cx="0" cy="0" r="27"/><circle cx="-64" cy="64" r="27"/><circle cx="64" cy="64" r="27"/></g>
+  </g>
+  <g transform="translate(640 725)" filter="url(#sh)">
+    <circle r="170" fill="#FFFFFF"/><circle r="118" fill="#140F2E"/><circle r="68" fill="#FFD000"/><circle r="26" fill="#FF2D55"/>
+  </g>
+</svg>

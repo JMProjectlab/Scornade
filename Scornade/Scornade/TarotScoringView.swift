@@ -55,6 +55,7 @@ struct TarotScoringView: View {
             .padding()
         }
         .navigationTitle(session.gameName)
+        .nightBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -116,8 +117,8 @@ struct TarotScoringView: View {
             .disabled(!canValidate)
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(.separator), lineWidth: 0.5))
+        .background(Color.cloud.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.hairline, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -129,7 +130,7 @@ struct TarotScoringView: View {
                     Button { taker = i } label: {
                         Text(session.entrants[i].name).font(.subheadline.weight(.medium)).lineLimit(1)
                             .frame(maxWidth: .infinity).padding(.vertical, 9)
-                            .background(taker == i ? Color.brandLight : Color(.secondarySystemBackground))
+                            .background(taker == i ? Color.brandLight : Color.cloud)
                             .foregroundStyle(taker == i ? Color.brandDark : Color.secondary)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(taker == i ? Color.brand : Color.clear, lineWidth: 2))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -258,7 +259,7 @@ struct TarotScoringView: View {
         Button(action: action) {
             Text(LocalizedStringKey(label)).font(.subheadline).lineLimit(1)
                 .frame(maxWidth: .infinity).padding(.vertical, 8)
-                .background(selected ? Color.brandLight : Color(.secondarySystemBackground))
+                .background(selected ? Color.brandLight : Color.cloud)
                 .foregroundStyle(selected ? Color.brandDark : Color.secondary)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.brand : Color.clear, lineWidth: 1.5))
                 .clipShape(RoundedRectangle(cornerRadius: 8))

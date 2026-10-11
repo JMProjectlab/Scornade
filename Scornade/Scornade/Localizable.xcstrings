@@ -1,6 +1,50 @@
 {
   "sourceLanguage" : "fr",
   "strings" : {
+    "%@ ne marque rien : ses %lld points sont remis en jeu pour la donne suivante, où %lld points seront en jeu." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ scores nothing: their %2$lld points go back in play for the next deal, which will be worth %3$lld points."
+          }
+        }
+      }
+    },
+    "%lld points sont en jeu, laissés par le litige : ils reviennent au camp qui remporte cette donne." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld points are in play, left by the tie: they go to the side that wins this deal."
+          }
+        }
+      }
+    },
+    "Litige — 81 partout" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tie — 81 all"
+          }
+        }
+      }
+    },
+    "litige" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tie"
+          }
+        }
+      }
+    },
     "" : {
 
     },

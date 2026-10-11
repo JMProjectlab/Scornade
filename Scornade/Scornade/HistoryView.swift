@@ -48,6 +48,7 @@ struct HistoryView: View {
             }
         }
         .navigationTitle("Historique")
+        .nightBackground()
         .navigationBarTitleDisplayMode(.inline)
         .alert("Supprimer cette partie ?", isPresented: deletionAlert, presenting: pendingDeletion) { session in
             Button("Supprimer", role: .destructive) { store.deleteSession(id: session.id) }

@@ -18,15 +18,12 @@ struct LoginView: View {
             Spacer()
 
             VStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 18).fill(Color.brand).frame(width: 80, height: 80)
-                    RoundedRectangle(cornerRadius: 7)
-                        .fill(Color.brandLight)
-                        .frame(width: 34, height: 46)
-                        .rotationEffect(.degrees(-10)).offset(x: -3, y: 2)
-                    RoundedRectangle(cornerRadius: 7).fill(.white).frame(width: 34, height: 46)
-                    Text("Sc").font(.system(size: 18, weight: .semibold)).foregroundStyle(Color.ink)
-                }
+                // L'icône de l'app, posée dans la lueur braise qui l'éclaire.
+                Image("LogoScornade")
+                    .resizable()
+                    .frame(width: 96, height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .shadow(color: Color(hex: "FF5A1F").opacity(0.55), radius: 28)
                 Text("Scornade").font(.jmDisplay).jmTightTracking(34)
                 Text("Comptez. Gagnez. Recommencez.")
                     .font(.subheadline).foregroundStyle(.secondary)
@@ -46,14 +43,14 @@ struct LoginView: View {
                 } onCompletion: { result in
                     handleApple(result)
                 }
-                .signInWithAppleButtonStyle(.black)
+                .signInWithAppleButtonStyle(.white)
                 .frame(height: 50)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
                 HStack(spacing: 8) {
-                    Rectangle().fill(Color(.separator)).frame(height: 0.5)
+                    Rectangle().fill(Color.hairline).frame(height: 0.5)
                     Text("ou").font(.caption).foregroundStyle(.secondary)
-                    Rectangle().fill(Color(.separator)).frame(height: 0.5)
+                    Rectangle().fill(Color.hairline).frame(height: 0.5)
                 }
                 .padding(.vertical, 2)
 
@@ -85,6 +82,14 @@ struct LoginView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
         }
+        .background(
+            ZStack {
+                Color.night
+                RadialGradient(colors: [Color(hex: "FF5A1F").opacity(0.35), .clear],
+                               center: UnitPoint(x: 0.5, y: 0.32), startRadius: 0, endRadius: 320)
+            }
+            .ignoresSafeArea()
+        )
         .alert("Connexion impossible", isPresented: .constant(authError != nil)) {
             Button("OK") { authError = nil }
         } message: {
@@ -93,7 +98,7 @@ struct LoginView: View {
         // Quand la vue est présentée depuis l'onglet Joueurs pour rattacher un
         // compte à une session locale, elle se referme d'elle-même une fois la
         // connexion faite. À la racine de l'app, `dismiss()` ne fait rien.
-        .onChange(of: store.currentUser) { user in
+        .onChange(of: store.currentUser) { _, user in
             if let user, !user.isGuest { dismiss() }
         }
     }
@@ -136,10 +141,14 @@ struct LoginView: View {
                     return
                 }
                 let profile = googleUser.profile
-                store.signIn(id: authResult?.user.uid ?? UUID().uuidString,
-                             name: profile?.name ?? "Joueur Google",
-                             email: profile?.email,
-                             mode: .google)
+                let uid = authResult?.user.uid ?? UUID().uuidString
+                let name = profile?.name ?? "Joueur Google"
+                let email = profile?.email
+                // Le rappel de Firebase n'est pas garanti sur le fil principal ;
+                // le Store, lui, vit sur le MainActor.
+                Task { @MainActor in
+                    store.signIn(id: uid, name: name, email: email, mode: .google)
+                }
             }
         }
     }
@@ -191,10 +200,13 @@ struct LoginView: View {
                     authError = error.localizedDescription
                     return
                 }
-                store.signIn(id: authResult?.user.uid ?? cred.user,
-                             name: displayName,
-                             email: cred.email ?? authResult?.user.email,
-                             mode: .apple)
+                let uid = authResult?.user.uid ?? cred.user
+                let email = cred.email ?? authResult?.user.email
+                // Le rappel de Firebase n'est pas garanti sur le fil principal ;
+                // le Store, lui, vit sur le MainActor.
+                Task { @MainActor in
+                    store.signIn(id: uid, name: displayName, email: email, mode: .apple)
+                }
             }
         case .failure(let error):
             currentNonce = nil

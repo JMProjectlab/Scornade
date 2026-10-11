@@ -62,6 +62,7 @@ struct BeloteScoringView: View {
             .padding()
         }
         .navigationTitle(session.gameName)
+        .nightBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -160,7 +161,7 @@ struct BeloteScoringView: View {
             }
             .foregroundStyle(.primary)
             .padding(.horizontal, 14).padding(.vertical, 10)
-            .background(Color(.secondarySystemBackground))
+            .background(Color.cloud)
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
@@ -174,13 +175,23 @@ struct BeloteScoringView: View {
     }
 
     private func donneCard(_ session: ScoreSession) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let pending = session.belotePending
+        return VStack(alignment: .leading, spacing: 12) {
             takerSection(session)
+            if pending > 0 {
+                Text("\(pending) points sont en jeu, laissés par le litige : ils reviennent au camp qui remporte cette donne.")
+                    .font(.caption)
+                    .foregroundStyle(Color.brandDark)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.brandLight)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
             atoutSection()
             pointsSection()
             bonusSection()
             if let t = taker, capot != nil || sum == total {
-                resultPreview(takerName: session.entrants[t].name)
+                resultPreview(takerName: session.entrants[t].name, pending: pending)
             }
             Button(action: validate) {
                 Label("Valider la donne", systemImage: "checkmark").frame(maxWidth: .infinity)
@@ -190,8 +201,8 @@ struct BeloteScoringView: View {
             .disabled(!canValidate)
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(.separator), lineWidth: 0.5))
+        .background(Color.cloud.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.hairline, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -215,7 +226,7 @@ struct BeloteScoringView: View {
                             .font(.title3)
                             .foregroundStyle(sym == "♥" || sym == "♦" ? Color.danger : Color.primary)
                             .frame(width: 44, height: 38)
-                            .background(suit == sym ? Color.brandLight : Color(.secondarySystemBackground))
+                            .background(suit == sym ? Color.brandLight : Color.cloud)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(suit == sym ? Color.brand : Color.clear, lineWidth: 2))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
@@ -257,7 +268,7 @@ struct BeloteScoringView: View {
         Button { taker = team } label: {
             Text(label).font(.subheadline.weight(.medium)).lineLimit(1)
                 .frame(maxWidth: .infinity).padding(.vertical, 9)
-                .background(taker == team ? (team == 0 ? Color.brandLight : Color.teamTwoLight) : Color(.secondarySystemBackground))
+                .background(taker == team ? (team == 0 ? Color.brandLight : Color.teamTwoLight) : Color.cloud)
                 .foregroundStyle(taker == team ? (team == 0 ? Color.brandDark : Color.teamTwoDark) : Color.secondary)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(taker == team ? Color.brand : Color.clear, lineWidth: 2))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -265,25 +276,52 @@ struct BeloteScoringView: View {
         .buttonStyle(.plain)
     }
 
+    /// Pas de réglage des points aux cartes.
+    ///
+    /// Deux pas plutôt qu'un seul : les points d'une donne tombent rarement
+    /// sur une dizaine, et n'avancer que de 10 en 10 obligeait à saisir le
+    /// chiffre exact au clavier pour la moindre correction.
+    private static let pointSteps = [-10, -1, 1, 10]
+
     private func pointsBox(team: Int) -> some View {
         let value = team == 0 ? p0 : p1
         return VStack(spacing: 6) {
             Text(team == 0 ? "Équipe 1" : "Équipe 2").font(.caption2).foregroundStyle(.secondary)
+            TextField("0", text: pointsBinding(team: team))
+                .keyboardType(.numberPad).multilineTextAlignment(.center)
+                .font(.jmScore(20, weight: .medium))
+                .frame(maxWidth: .infinity).disabled(capot != nil)
             HStack(spacing: 4) {
-                Button { setTeam(team, to: value - 10) } label: { Image(systemName: "minus") }
+                ForEach(Self.pointSteps, id: \.self) { step in
+                    Button { setTeam(team, to: value + step) } label: {
+                        Text(verbatim: step > 0 ? "+\(step)" : "\(step)")
+                            .font(.caption2.weight(.medium))
+                            .frame(maxWidth: .infinity, minHeight: 24)
+                    }
                     .buttonStyle(.bordered).disabled(capot != nil)
-                TextField("0", text: team == 0 ? $p0Str : $p1Str)
-                    .keyboardType(.numberPad).multilineTextAlignment(.center)
-                    .frame(width: 44).disabled(capot != nil)
-                    .onSubmit { setTeam(team, to: team == 0 ? p0 : p1) }
-                Button { setTeam(team, to: value + 10) } label: { Image(systemName: "plus") }
-                    .buttonStyle(.bordered).disabled(capot != nil)
+                }
             }
         }
         .frame(maxWidth: .infinity)
         .padding(8)
         .background(team == 0 ? Color.brandLight : Color.teamTwoLight)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Saisie au clavier : taper un score doit compléter l'autre camp comme le
+    /// font les boutons. Sans cela, corriger à la main laissait les deux cases
+    /// incohérentes jusqu'à ce qu'on retouche aussi la seconde.
+    private func pointsBinding(team: Int) -> Binding<String> {
+        Binding(
+            get: { team == 0 ? p0Str : p1Str },
+            set: { raw in
+                guard let n = Int(raw.filter(\.isNumber)) else {
+                    if team == 0 { p0Str = "" } else { p1Str = "" }
+                    return
+                }
+                setTeam(team, to: n)
+            }
+        )
     }
 
     private func bonusToggle(_ label: String, on: Bool, action: @escaping () -> Void) -> some View {
@@ -293,12 +331,12 @@ struct BeloteScoringView: View {
                 Spacer()
                 Text(on ? "Oui" : "Non").font(.caption2.weight(.medium))
                     .padding(.horizontal, 7).padding(.vertical, 2)
-                    .background(on ? Color.brandLight : Color(.tertiarySystemBackground))
+                    .background(on ? Color.brandLight : Color.cloudRaised)
                     .foregroundStyle(on ? Color.brandDark : Color.secondary)
                     .clipShape(Capsule())
             }
             .padding(.horizontal, 11).padding(.vertical, 9)
-            .background(Color(.secondarySystemBackground))
+            .background(Color.cloud)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(on ? Color.brand : Color.clear, lineWidth: 1.5))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .foregroundStyle(.primary)
@@ -306,20 +344,27 @@ struct BeloteScoringView: View {
         .buttonStyle(.plain)
     }
 
-    private func resultPreview(takerName: String) -> some View {
-        let round = buildRound()
+    private func resultPreview(takerName: String, pending: Int) -> some View {
+        let round = buildRound(pending: pending)
         let d = round.deltas()
+        let litige = round.isLitige
         let made = round.contractMade
         return VStack(alignment: .leading, spacing: 3) {
-            Text(made ? "\(takerName) réussit son contrat \(suit ?? "")" : "\(takerName) est dedans — chute !")
-                .font(.caption.weight(.semibold))
+            if litige {
+                Text("Litige — 81 partout").font(.caption.weight(.semibold))
+                Text("\(takerName) ne marque rien : ses \(BeloteRound.litigePoints) points sont remis en jeu pour la donne suivante, où \(pending + BeloteRound.litigePoints) points seront en jeu.")
+                    .font(.caption2)
+            } else {
+                Text(made ? "\(takerName) réussit son contrat \(suit ?? "")" : "\(takerName) est dedans — chute !")
+                    .font(.caption.weight(.semibold))
+            }
             HStack { Text("Équipe 1"); Spacer(); Text("+\(d[0]) pts") }.font(.caption)
             HStack { Text("Équipe 2"); Spacer(); Text("+\(d[1]) pts") }.font(.caption)
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(made ? Color.successLight : Color.dangerLight)
-        .foregroundStyle(made ? Color.success : Color.danger)
+        .background(litige ? Color.brandLight : (made ? Color.successLight : Color.dangerLight))
+        .foregroundStyle(litige ? Color.brandDark : (made ? Color.success : Color.danger))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
@@ -333,9 +378,9 @@ struct BeloteScoringView: View {
                 HStack(spacing: 8) {
                     Text("D\(idx + 1)").font(.caption).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
                     Text("É\(r.takerTeam + 1) prend \(r.suit)").font(.caption)
-                    Text(r.contractMade ? "✓" : "chute")
+                    Text(r.isLitige ? "litige" : (r.contractMade ? "✓" : "chute"))
                         .font(.caption2.weight(.medium))
-                        .foregroundStyle(r.contractMade ? Color.success : Color.danger)
+                        .foregroundStyle(r.isLitige ? Color.brandDark : (r.contractMade ? Color.success : Color.danger))
                     Spacer()
                     Text("\(d[0]) – \(d[1])").font(.caption.weight(.medium))
                     Button { loadForEdit(idx) } label: { Image(systemName: "pencil").font(.caption) }
@@ -370,13 +415,17 @@ struct BeloteScoringView: View {
         }
     }
 
-    private func buildRound() -> BeloteRound {
+    private func buildRound(pending: Int) -> BeloteRound {
         BeloteRound(takerTeam: taker ?? 0, suit: suit ?? "♠",
-                    cardPoints: [p0, p1], belote: [belote0, belote1], capotTeam: capot)
+                    cardPoints: [p0, p1], belote: [belote0, belote1], capotTeam: capot,
+                    pending: pending)
     }
 
     private func validate() {
-        store.addBeloteRound(sessionID: sessionID, round: buildRound())
+        // Les points en jeu sont inscrits dans la donne : le détail affiché
+        // reste celui qui a servi au calcul, même des mois plus tard.
+        let pending = session?.belotePending ?? 0
+        store.addBeloteRound(sessionID: sessionID, round: buildRound(pending: pending))
         resetForm()
     }
 
