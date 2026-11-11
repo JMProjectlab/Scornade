@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Aucun écran natif n'utilise ce thème : il ne sert qu'à peindre la
+         fenêtre pendant le lancement, avant que Chrome ne prenne la main. -->
+    <style name="Theme.Scornade" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+    </style>
+</resources>

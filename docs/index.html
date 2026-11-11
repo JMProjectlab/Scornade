@@ -8,6 +8,9 @@
 <meta name="theme-color" content="#0f0a24">
 <link rel="icon" href="assets/img/icone.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Scornade">
 <link rel="canonical" href="https://jmprojectlab.github.io/Scornade/">
 <!-- Bannière Safari sur iPhone : propose d'ouvrir ou d'installer l'app. -->
 <meta name="apple-itunes-app" content="app-id=6802812197">
@@ -77,6 +80,15 @@
   // Fermer la feuille des règles au clic sur le fond.
   const sheet = document.getElementById("sheet");
   sheet.addEventListener("click", (e) => { if (e.target === sheet) sheet.close(); });
+
+  // Mode hors ligne. Enregistré après le premier rendu : le service worker ne
+  // doit jamais retarder l'affichage, et son absence — navigateur ancien, page
+  // ouverte en `file://` — ne change rien au fonctionnement du site.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => { /* rien à faire : le site marche sans */ });
+    });
+  }
 </script>
 
 </body>

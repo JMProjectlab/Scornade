@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- L'image de démarrage est passée à Chrome par le FileProvider : c'est un
+     autre processus qui l'affiche, il lui faut un accès en lecture. -->
+<paths>
+    <files-path
+        name="twa_splash"
+        path="twa_splash/" />
+</paths>

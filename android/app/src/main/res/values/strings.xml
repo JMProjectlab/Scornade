@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Scornade</string>
+
+    <!-- Adresse ouverte au lancement. Le service worker du site prend le
+         relais si le réseau est absent. -->
+    <string name="launch_url" translatable="false">https://jmprojectlab.github.io/Scornade/</string>
+    <string name="host_name" translatable="false">jmprojectlab.github.io</string>
+
+    <!-- Déclaration lue par Chrome au premier lancement : elle dit quel
+         domaine cette application revendique. Le domaine doit répondre la
+         réciproque dans /.well-known/assetlinks.json, sinon la barre
+         d'adresse reste affichée. Voir android/README.md. -->
+    <string name="asset_statements" translatable="false">
+        [{
+          \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+          \"target\": {
+            \"namespace\": \"web\",
+            \"site\": \"https://jmprojectlab.github.io\"
+          }
+        }]
+    </string>
+
+    <string name="file_provider_authority" translatable="false">com.jmprojectlab.scornade.fileprovider</string>
+</resources>
