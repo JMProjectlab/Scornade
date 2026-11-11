@@ -26,11 +26,17 @@ const keySessions = (space) => `sm.sessions.${space}`;
 const keyDeclined = (space) => `sm.guestImport.declined.${space}`;
 const KEY_LANG = "sm.languagePreference";
 const KEY_THEME = "sm.theme";
+// Choix « sans compte » retenu : sans lui, l'écran de connexion reviendrait à
+// chaque lancement, et l'app serait un mur pour qui ne veut pas de compte.
+const KEY_GUEST = "sm.guest";
 
 export const state = {
   players: [],
   sessions: [],
   user: null,
+  /** Vrai quand « Continuer sans compte » a été choisi. Même mode que
+      `AuthMode.guest` côté iOS : l'app s'utilise entièrement, en local. */
+  guest: false,
   /** Données sans compte proposées à l'import après une connexion. */
   pendingImport: null,
   /** Code joueur reçu par lien (QR scanné avec l'appareil photo). */
@@ -72,6 +78,7 @@ function writeJSON(key, value) {
 
 export function load() {
   state.user = readJSON(KEY_USER, null);
+  state.guest = localStorage.getItem(KEY_GUEST) === "1";
   migrateLegacy();
   loadSpace();
 }
@@ -142,6 +149,15 @@ export function setUser(user) {
   emit();
 }
 
+/** Entre dans l'espace sans compte, et s'en souvient au prochain lancement.
+ *  Les parties restent sur l'appareil ; se connecter plus tard propose de les
+ *  reprendre dans le compte (voir `offerGuestImport`). */
+export function continueAsGuest() {
+  state.guest = true;
+  localStorage.setItem(KEY_GUEST, "1");
+  emit();
+}
+
 // --- Import des données sans compte --------------------------------------
 
 function offerGuestImport() {
@@ -190,6 +206,9 @@ export function resolveGuestImport(accept) {
 export function signOut() {
   state.sync?.stop();
   state.sync = null;
+  // Se déconnecter ramène au choix du départ : compte, ou pas de compte.
+  state.guest = false;
+  localStorage.removeItem(KEY_GUEST);
   setUser(null);
 }
 
