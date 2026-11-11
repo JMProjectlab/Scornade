@@ -233,4 +233,12 @@ final class ScornadeTests: XCTestCase {
         XCTAssertEqual(GameCatalog.game(id: "cinqrois")?.roundLimit, 11)
         XCTAssertEqual(GameCatalog.game(id: "phase10")?.engine, .phaseRace)
     }
+
+    func testCatalogCarriesDameDePique() {
+        let game = GameCatalog.game(id: "damedepique")
+        XCTAssertNotNil(game, "damedepique manque au catalogue")
+        XCTAssertEqual(game?.engine, .cumulativePoints)
+        XCTAssertEqual(game?.defaultTarget, 100)
+        XCTAssertEqual(game?.higherWins, false)
+    }
 }

@@ -49,7 +49,7 @@ ses propres documents.
 | `manifest.webmanifest` | Nom, icônes et mode plein écran — installation et app Android |
 | `sw.js` | Service worker : cache du site, mode hors ligne |
 | `assets/icons/` | Icônes dérivées de l'icône iOS (voir `android/store/`) |
-| `assets/data.js` | Les 23 jeux, leurs règles et leurs pictogrammes |
+| `assets/data.js` | Les 24 jeux, leurs règles et leurs pictogrammes |
 | `assets/engine.js` | Calculs de score — portage de `Models.swift` |
 | `assets/charts.js` | Anneau, barres et jauge — SVG écrit à la main |
 | `assets/store.js` | État, `localStorage`, fusion avec le serveur |

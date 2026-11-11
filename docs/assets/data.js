@@ -50,6 +50,8 @@ export const GAMES = [
   { id: "cinqrois", name: "Les Cinq Rois", cat: "societe", engine: "cumul", team: false, target: 0, high: false,
     roundLimit: 11,
     rules: "Deux jeux de 58 cartes en cinq couleurs — cœur, carreau, trèfle, pique et étoile — allant du 3 au Roi, plus six jokers.\n\nOnze manches, et une seule distribution possible à chaque fois : trois cartes à la première, quatre à la deuxième, et ainsi de suite jusqu'à treize à la onzième. On forme des séries — au moins trois cartes de même valeur, couleurs différentes — ou des suites d'au moins trois cartes qui se suivent dans la même couleur.\n\nL'atout de la manche est la valeur distribuée : les 3 à la première manche, les 4 à la deuxième, et les Rois à la onzième. Il remplace n'importe quelle carte, comme un joker.\n\nDès qu'un joueur pose toute sa main, chacun des autres joue un dernier tour puis compte ce qui lui reste : les cartes valent leur numéro, le Valet 11, la Dame 12, le Roi 13, un atout 20 et un joker 50.\n\nAu bout des onze manches, le plus petit total gagne." },
+  { id: "damedepique", name: "Dame de pique", cat: "cartes", engine: "cumul", team: false, target: 100, high: false,
+    rules: "52 cartes. À quatre joueurs, chacun en reçoit treize. À trois, on retire le 2 de carreau ; à cinq, le 2 de carreau et le 2 de pique, pour que tout le monde ait autant de cartes.\n\nChaque cœur ramassé coûte 1 point de pénalité, et la dame de pique 13 à elle seule. Une manche met donc toujours 26 points en jeu.\n\nAvant de jouer, chacun passe trois cartes à un voisin : à gauche à la première donne, à droite à la deuxième, en face à la troisième, et personne ne passe à la quatrième. Puis le cycle recommence.\n\nLe joueur qui a le 2 de trèfle entame le premier pli. Il faut fournir la couleur demandée, sinon on se défausse de ce qu'on veut. Il n'y a pas d'atout : la plus forte carte de la couleur demandée remporte le pli, avec toutes les pénalités qu'il contient. On ne peut pas entamer à cœur tant qu'aucun cœur n'a été défaussé.\n\nLe grand chelem : celui qui ramasse les treize cœurs et la dame de pique ne marque rien, et chacun des autres prend 26 points.\n\nLa partie s'arrête dès qu'un joueur atteint 100 points. Le plus petit total gagne." },
 ];
 
 export const CATEGORIES = [
@@ -294,6 +296,9 @@ const GLYPHS = {
       <rect x="7" y="13.35" width="5" height="1.4" rx="0.7" fill="currentColor"/>`,
   // Les Cinq Rois — une couronne à cinq pointes.
   cinqrois: `<path d="M4 17V8l3.5 3.5L11 5.5l3.5 6L18 8v9z" fill="currentColor"/>`,
+  // Dame de pique — un cœur, la couleur qui coûte : comme le SF Symbol côté
+  // iOS. Le pique est déjà pris par la coinche.
+  damedepique: `<path d="M11 18.4C6.4 14.6 3.2 11.9 3.2 8.6c0-2.4 1.9-4.2 4.2-4.2 1.5 0 2.8.8 3.6 2 .8-1.2 2.1-2 3.6-2 2.3 0 4.2 1.8 4.2 4.2 0 3.3-3.2 6-7.8 9.8z" fill="currentColor"/>`,
 };
 
 // Pictogramme par défaut, pour un jeu que ce client ne connaît pas encore —
