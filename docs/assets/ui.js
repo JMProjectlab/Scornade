@@ -19,7 +19,7 @@ let scratch = {};          // saisies en cours, jamais persistées
 let auth = null;           // API renvoyée par initFirebase(), ou null
 
 export function setAuth(api) { auth = api; }
-export const requiresSignIn = () => Boolean(auth) && !S.state.user;
+export const requiresSignIn = () => Boolean(auth) && !S.state.user && !S.state.guest;
 
 export function go(next) {
   view = next;
@@ -110,7 +110,9 @@ function screenLogin() {
       Se connecter avec Apple</button>
     <div class="sep">ou</div>
     <button class="btn outline" data-act="sign-google">Se connecter avec Google</button>
-    <p class="legal">Un compte permet de retrouver vos parties sur vos autres appareils.<br>
+    <button class="btn secondary" data-act="continue-guest">Continuer sans compte</button>
+    <p class="legal">Un compte permet de retrouver vos parties sur vos autres appareils.
+      Sans compte, tout reste sur cet appareil.<br>
       <a href="https://apps.apple.com/fr/app/id6802812197">Application iPhone</a> ·
       <a href="politique-de-confidentialite.html">Politique de confidentialité</a></p>
   </div>`;
@@ -1308,6 +1310,7 @@ export function bindEvents() {
 
       case "sign-apple": auth?.signInApple().catch((e) => toast(e.message)); break;
       case "sign-google": auth?.signInGoogle().catch((e) => toast(e.message)); break;
+      case "continue-guest": S.continueAsGuest(); render(); break;
       case "sign-out":
         (auth ? auth.signOut() : Promise.resolve()).finally(() => { S.signOut(); go({ screen: "home" }); });
         break;
