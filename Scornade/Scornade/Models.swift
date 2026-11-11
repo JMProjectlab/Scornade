@@ -66,7 +66,7 @@ struct PlayerInvite: Equatable {
     var name: String
     var email: String?
 
-    static let base = "https://jmprojectlab.fr/Scornade/"
+    static let base = "https://jmprojectlab.github.io/Scornade/"
 
     init(uid: String, name: String, email: String?) {
         self.uid = uid

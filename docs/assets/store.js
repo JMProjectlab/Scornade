@@ -242,12 +242,12 @@ export function addPlayer(name, email = null, linkedUid = null) {
 // --- Code joueur ----------------------------------------------------------
 //
 // Le QR code « Mon code joueur » porte un lien vers ce site :
-//   https://jmprojectlab.fr/Scornade/?rejoindre=<uid>&n=<nom>&e=<e-mail>
+//   https://jmprojectlab.github.io/Scornade/?rejoindre=<uid>&n=<nom>&e=<e-mail>
 // Scanné depuis l'app, il ajoute le joueur. Scanné avec l'appareil photo, il
 // ouvre ce site, qui propose d'ajouter le joueur, et l'App Store à qui n'a pas
 // l'app. Même format que PlayerInvite côté iOS.
 
-export const INVITE_BASE = "https://jmprojectlab.fr/Scornade/";
+export const INVITE_BASE = "https://jmprojectlab.github.io/Scornade/";
 
 export function inviteURL(user) {
   const q = new URLSearchParams({ rejoindre: user.id, n: user.name });
