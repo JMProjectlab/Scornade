@@ -21,7 +21,7 @@ android {
         // Identique au bundle id iOS, et définitif une fois la fiche créée sur
         // Google Play : un nom de paquet publié ne se change ni ne se réutilise.
         applicationId = "com.jmprojectlab.scornade"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
