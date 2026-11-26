@@ -141,6 +141,14 @@ test("les trois derniers jeux ajoutés sont bien configurés", () => {
   }
 });
 
+test("la dame de pique se joue en 100 points, au plus petit total", () => {
+  const g = gameById("damedepique");
+  assert.equal(g.cat, "cartes");
+  assert.equal(g.engine, "cumul");
+  assert.equal(g.target, 100);
+  assert.equal(g.high, false);
+});
+
 // --- Mölkky : les ratés ---------------------------------------------------
 
 test("Mölkky — trois ratés d'affilée éliminent, un lancer réussi remet à zéro", () => {

@@ -1,6 +1,6 @@
 # Scornade
 
-Compteur de points pour **23 jeux de société** — belote, coinche, tarot, Yam's,
+Compteur de points pour **24 jeux de société** — belote, coinche, tarot, Yam's,
 mölkky, fléchettes, 421, Papayoo, Phase 10, Les Cinq Rois et les autres. Saisie
 en direct, historique, statistiques.
 
